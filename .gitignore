@@ -1,4 +1,5 @@
-app/.env
+.cursor/
+*.cursor/*
 .env
 .env.local
 .venv/
@@ -10,4 +11,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Локальный кэш дистрибутивов (wheels, tar базового Docker-образа); см. scripts/refresh-local-dist.ps1
+local-dist/
+app/.env
 app/data/
+app/config.py
+app/__pycache__
+.vscode/
+presentations/

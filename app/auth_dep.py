@@ -26,6 +26,11 @@ def _any_key_configured(settings: Settings) -> bool:
     return bool(settings.app_api_key or settings.app_admin_key or settings.app_member_key)
 
 
+def is_auth_configured(settings: Settings) -> bool:
+    """True, если на сервере задан хотя бы один из APP_API_KEY / APP_ADMIN_KEY / APP_MEMBER_KEY."""
+    return _any_key_configured(settings)
+
+
 def _resolve_role(token: str | None, settings: Settings) -> Role | None:
     if not token:
         return None

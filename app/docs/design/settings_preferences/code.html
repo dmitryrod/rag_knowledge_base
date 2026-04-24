@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nexus AI - Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-container": "#575757",
+                        "error": "#ee7d77",
+                        "on-secondary": "#1f2021",
+                        "on-secondary-container": "#bfbfbf",
+                        "background": "#0e0e0e",
+                        "surface": "#0e0e0e",
+                        "on-surface-variant": "#acabaa",
+                        "on-secondary-fixed": "#3e3f40",
+                        "surface-container": "#191a1a",
+                        "inverse-primary": "#5e5f60",
+                        "inverse-on-surface": "#565555",
+                        "secondary-fixed": "#e3e2e2",
+                        "tertiary": "#fbf9f8",
+                        "outline": "#767575",
+                        "primary-dim": "#b8b9b9",
+                        "outline-variant": "#484848",
+                        "tertiary-fixed-dim": "#e7e5e4",
+                        "primary-fixed": "#e2e2e2",
+                        "secondary-container": "#3a3c3c",
+                        "primary-container": "#454747",
+                        "surface-container-highest": "#252626",
+                        "on-primary-fixed": "#3e4040",
+                        "primary-fixed-dim": "#d4d4d4",
+                        "on-secondary-fixed-variant": "#5b5c5c",
+                        "surface-variant": "#252626",
+                        "tertiary-container": "#edeaea",
+                        "surface-dim": "#0e0e0e",
+                        "surface-container-lowest": "#000000",
+                        "tertiary-fixed": "#f5f3f3",
+                        "on-primary-container": "#d0d0d0",
+                        "error-container": "#7f2927",
+                        "on-error-container": "#ff9993",
+                        "tertiary-dim": "#edeaea",
+                        "on-tertiary-fixed": "#4a4949",
+                        "surface-container-high": "#1f2020",
+                        "on-tertiary": "#5f5f5f",
+                        "surface-container-low": "#131313",
+                        "inverse-surface": "#fcf9f8",
+                        "on-error": "#490106",
+                        "on-tertiary-fixed-variant": "#666666",
+                        "on-primary": "#3f4041",
+                        "on-background": "#e7e5e4",
+                        "secondary": "#9e9e9e",
+                        "surface-tint": "#c6c6c7",
+                        "on-primary-fixed-variant": "#5a5c5c",
+                        "on-surface": "#e7e5e4",
+                        "secondary-fixed-dim": "#d5d4d4",
+                        "surface-bright": "#2c2c2c",
+                        "secondary-dim": "#9e9e9e",
+                        "error-dim": "#bb5551",
+                        "primary": "#c6c6c7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "2xl": "1rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter", "sans-serif"],
+                        "display": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom range slider styling for Webkit */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #e7e5e4;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #3a3c3c;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body antialiased selection:bg-primary-container selection:text-on-primary-container flex h-screen overflow-hidden">
+<!-- SideNavBar -->
+<nav class="h-screen w-64 fixed left-0 top-0 flex flex-col bg-[#0e0e0e] dark:bg-[#0e0e0e] text-[#c6c6c7] dark:text-[#c6c6c7] font-inter antialiased tracking-tight text-sm border-r border-[#484848]/20 shadow-none z-50">
+<div class="flex flex-col h-full p-4 gap-2">
+<!-- Header -->
+<div class="px-3 py-6 mb-4 flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest overflow-hidden flex-shrink-0 border border-outline-variant/20">
+<img alt="Abstract architectural geometric pattern in monochrome" class="w-full h-full object-cover opacity-80 mix-blend-luminosity" data-alt="Abstract architectural geometric pattern in monochrome" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm47kNMsjC1fmFnVCHZe8r0N4NpfFh1GqrtsT4cN8f6WKkEf_vY44B1aPgG5fAHYXu_isjEg9O8d7CYB7HvZEHnjDFU3wfRhY5imNK1QXmssrn17wLRc9ZrnJeTBHa_9qRJpuMPj6ctLLSIvpNIcJGvlmboCaDGmtcywwRcwy7O-Fo6wclQBqJ2GhtmvxoyIFEszO8ZTeu_cY3AArC4BDsotnIzfLZ-J2G6GUAddgOFZeQKPfZOmbO1wDhKxI3ZrF-PlYn7O-HeP8"/>
+</div>
+<div>
+<h1 class="text-xl font-bold tracking-tighter text-[#e7e5e4]">Nexus AI</h1>
+<p class="text-xs text-[#acabaa]">The Silent Architect</p>
+</div>
+</div>
+<!-- Primary Nav -->
+<div class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#acabaa] hover:bg-[#191a1a] hover:text-[#e7e5e4] transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined text-[20px] group-active:scale-95 transition-transform duration-150" data-icon="add">add</span>
+<span>New Chat</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#acabaa] hover:bg-[#191a1a] hover:text-[#e7e5e4] transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined text-[20px] group-active:scale-95 transition-transform duration-150" data-icon="history">history</span>
+<span>History</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#acabaa] hover:bg-[#191a1a] hover:text-[#e7e5e4] transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined text-[20px] group-active:scale-95 transition-transform duration-150" data-icon="folder">folder</span>
+<span>Knowledge Base</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#252626] text-[#e7e5e4] font-medium group" href="#">
+<span class="material-symbols-outlined text-[20px] group-active:scale-95 transition-transform duration-150" data-icon="settings" data-weight="fill" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span>Settings</span>
+</a>
+</div>
+<!-- Footer Nav -->
+<div class="mt-auto pt-4 border-t border-[#484848]/20 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#acabaa] hover:bg-[#191a1a] hover:text-[#e7e5e4] transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined text-[20px] group-active:scale-95 transition-transform duration-150" data-icon="help">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#acabaa] hover:bg-[#191a1a] hover:text-[#e7e5e4] transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined text-[20px] group-active:scale-95 transition-transform duration-150" data-icon="account_circle">account_circle</span>
+<span>Account</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Workspace -->
+<div class="flex-1 flex flex-col ml-64 h-screen relative">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 z-40 bg-[#0e0e0e]/80 backdrop-blur-xl dark:bg-[#0e0e0e]/80 text-[#c6c6c7] dark:text-[#c6c6c7] font-inter text-sm font-medium border-b border-[#484848]/20 shadow-none">
+<div class="flex items-center justify-between px-8 w-full h-full">
+<!-- Search / Left actions -->
+<div class="flex items-center gap-6">
+<span class="text-lg font-black tracking-widest text-[#e7e5e4] uppercase hidden md:block">Nexus AI</span>
+<nav class="flex items-center gap-6 ml-4">
+<a class="text-[#acabaa] pb-4 mt-4 hover:text-[#e7e5e4] transition-opacity duration-300" href="#">Chat</a>
+<a class="text-[#acabaa] pb-4 mt-4 hover:text-[#e7e5e4] transition-opacity duration-300" href="#">Documents</a>
+</nav>
+</div>
+<!-- Trailing Icons -->
+<div class="flex items-center gap-4">
+<button class="p-2 rounded-full text-[#acabaa] hover:text-[#e7e5e4] hover:bg-surface-container-highest transition-colors duration-200">
+<span class="material-symbols-outlined text-[22px]" data-icon="search">search</span>
+</button>
+<button class="p-2 rounded-full text-[#acabaa] hover:text-[#e7e5e4] hover:bg-surface-container-highest transition-colors duration-200">
+<span class="material-symbols-outlined text-[22px]" data-icon="notifications">notifications</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Canvas / Settings Form -->
+<main class="flex-1 mt-16 overflow-y-auto w-full">
+<div class="max-w-4xl mx-auto px-12 py-16 space-y-12 pb-32">
+<!-- Page Header -->
+<div class="mb-12">
+<h1 class="text-3xl font-display font-medium tracking-tight text-on-surface">Workspace Settings</h1>
+<p class="text-on-surface-variant mt-2 max-w-xl">Configure your environment, manage AI model preferences, and review your usage statistics.</p>
+</div>
+<!-- Section: General -->
+<section class="bg-surface-container-low rounded-2xl p-8 ring-1 ring-outline-variant/10">
+<h2 class="text-lg font-headline font-medium text-on-surface mb-8">General</h2>
+<div class="space-y-8">
+<!-- Language Setting -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/10 pb-8">
+<div>
+<h3 class="text-sm font-medium text-on-surface">Interface Language</h3>
+<p class="text-sm text-on-surface-variant mt-1">Select the primary language for the Nexus AI dashboard.</p>
+</div>
+<div class="relative w-full md:w-64">
+<select class="w-full bg-surface-container-highest text-sm text-on-surface rounded-xl px-4 py-2.5 appearance-none border border-outline-variant/20 focus:outline-none focus:ring-1 focus:ring-primary-dim transition-shadow cursor-pointer">
+<option value="en">English (US)</option>
+<option value="es">Español</option>
+<option value="fr">Français</option>
+<option value="de">Deutsch</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none text-[20px]" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Theme Setting -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h3 class="text-sm font-medium text-on-surface">Color Theme</h3>
+<p class="text-sm text-on-surface-variant mt-1">Choose your preferred visual aesthetic.</p>
+</div>
+<div class="flex bg-surface-container-highest p-1 rounded-xl border border-outline-variant/20 w-full md:w-auto">
+<button class="flex-1 md:flex-none px-4 py-2 text-sm font-medium rounded-lg text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="light_mode">light_mode</span>
+<span>Light</span>
+</button>
+<button class="flex-1 md:flex-none px-4 py-2 text-sm font-medium rounded-lg bg-surface-container-low text-on-surface shadow-sm ring-1 ring-outline-variant/10 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="dark_mode" data-weight="fill" style="font-variation-settings: 'FILL' 1;">dark_mode</span>
+<span>Dark</span>
+</button>
+<button class="flex-1 md:flex-none px-4 py-2 text-sm font-medium rounded-lg text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings_brightness">settings_brightness</span>
+<span>System</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Model Preferences -->
+<section class="bg-surface-container-low rounded-2xl p-8 ring-1 ring-outline-variant/10">
+<h2 class="text-lg font-headline font-medium text-on-surface mb-8">Model Preferences</h2>
+<div class="space-y-8">
+<!-- Default Model -->
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-outline-variant/10 pb-8">
+<div class="flex-1">
+<h3 class="text-sm font-medium text-on-surface">Default Architecture</h3>
+<p class="text-sm text-on-surface-variant mt-1">Select the primary LLM used for new chat instances and document analysis.</p>
+</div>
+<div class="relative w-full md:w-72">
+<select class="w-full bg-surface-container-highest text-sm text-on-surface rounded-xl px-4 py-2.5 appearance-none border border-outline-variant/20 focus:outline-none focus:ring-1 focus:ring-primary-dim transition-shadow cursor-pointer">
+<option value="nexus-v2">Nexus Core v2 (Recommended)</option>
+<option value="gpt-4">GPT-4 Turbo</option>
+<option value="claude-3">Claude 3 Opus</option>
+<option value="nexus-lite">Nexus Lite (Fast)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none text-[20px]" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Temperature Slider -->
+<div class="flex flex-col gap-4">
+<div class="flex justify-between items-end">
+<div>
+<h3 class="text-sm font-medium text-on-surface">Creativity (Temperature)</h3>
+<p class="text-sm text-on-surface-variant mt-1">Adjust the randomness of the model's output. Higher values are more creative.</p>
+</div>
+<span class="text-sm font-medium text-primary-dim px-2 py-1 bg-surface-container-highest rounded-md border border-outline-variant/20">0.7</span>
+</div>
+<div class="w-full mt-2">
+<input class="w-full appearance-none bg-transparent" max="1" min="0" step="0.1" type="range" value="0.7"/>
+<div class="flex justify-between text-[11px] text-on-surface-variant mt-2 uppercase tracking-wider">
+<span>Precise</span>
+<span>Balanced</span>
+<span>Creative</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Account -->
+<section class="bg-surface-container-low rounded-2xl p-8 ring-1 ring-outline-variant/10 relative overflow-hidden">
+<!-- Subtle structural glow -->
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] pointer-events-none"></div>
+<h2 class="text-lg font-headline font-medium text-on-surface mb-8 relative z-10">Account &amp; Billing</h2>
+<div class="space-y-8 relative z-10">
+<!-- Subscription Status -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/10 pb-8">
+<div>
+<h3 class="text-sm font-medium text-on-surface flex items-center gap-3">
+                                    Subscription Tier
+                                    <span class="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-gradient-to-tr from-primary to-primary-container text-on-primary font-bold">Pro</span>
+</h3>
+<p class="text-sm text-on-surface-variant mt-1">Active until October 24, 2024.</p>
+</div>
+<button class="px-5 py-2 text-sm font-medium text-primary hover:bg-surface-variant/50 rounded-lg transition-colors duration-200">
+                                Manage Billing
+                            </button>
+</div>
+<!-- API Usage -->
+<div class="flex flex-col gap-4">
+<div class="flex justify-between items-end">
+<div>
+<h3 class="text-sm font-medium text-on-surface">API Usage Limit</h3>
+<p class="text-sm text-on-surface-variant mt-1">Current billing cycle usage.</p>
+</div>
+<span class="text-sm font-medium text-on-surface">8.2M / 10M Tokens</span>
+</div>
+<!-- Progress Bar -->
+<div class="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden border border-outline-variant/10">
+<div class="h-full bg-gradient-to-r from-primary-container to-primary rounded-full w-[82%] relative">
+<div class="absolute right-0 top-0 bottom-0 w-4 bg-white/20 animate-pulse"></div>
+</div>
+</div>
+<p class="text-xs text-on-surface-variant text-right">Resets in 12 days</p>
+</div>
+</div>
+</section>
+<!-- Actions -->
+<div class="flex justify-end gap-4 mt-8 pt-8 border-t border-outline-variant/10">
+<button class="px-6 py-2.5 text-sm font-medium text-on-surface hover:bg-surface-container-highest rounded-xl transition-colors duration-200">
+                        Discard Changes
+                    </button>
+<button class="px-6 py-2.5 text-sm font-medium bg-primary text-on-primary rounded-xl hover:opacity-90 transition-opacity duration-200 shadow-[0_0_15px_rgba(198,198,199,0.15)]">
+                        Save Preferences
+                    </button>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,9 +1,41 @@
 # CHANGELOG
 
+## 2026-04-25
+
+### Changed
+
+- Веб-админка (чат): цитаты под сообщением ассистента — карточки с текстом и `chunk_id`, не сырой JSON.
+
+### Fixed
+
+- Веб-админка: **CORS** (по умолчанию `APP_CORS_ORIGINS=*`) — устраняет `TypeError: Failed to fetch` при запросах с другого origin; опционально **APP_PUBLIC_BASE_URL** + `apiPath()`; корень `/` отдаёт `index.html` с подстановкой `__API_BASE__` (`HTMLResponse`).
+- Polza/LLM: сетевые сбои до HTTP-ответа (в т.ч. **DNS Errno -3**) маппятся в `LlmUpstreamError` в `app/llm.py`; API чата отдаёт **502** (сеть/DNS) или **504** (таймаут) с читаемым `detail` вместо обобщённого 500.
+- `POLZA_BASE_URL`: валидация — только абсолютный URL с `http://` или `https://`.
+- `docker-compose.yml`: `dns` 8.8.8.8 / 8.8.4.4 для снижения сбоев резолва в Docker.
+
+## 2026-04-28
+
+### Added
+
+- SQLite: таблицы `chat_threads`, `chat_messages` — персистентная история нескольких чатов на раздел (RAG `collection_id`); при удалении раздела потоки удаляются каскадом (`PRAGMA foreign_keys = ON` в `app/db_sqlite.py`).
+- API: `GET/POST /v1/chat/threads`, `GET/PATCH/DELETE /v1/chat/threads/{id}`, `GET /v1/chat/threads/{id}/messages`, `POST /v1/chat/threads/{id}/messages` — тот же ответ `ChatOut`, что у `POST /v1/collections/{id}/chat`, плюс сохранение пары user/assistant в БД.
+- Веб-админка: редизайн в духе ChatGPT / дизайн-системы Carbon Logic (референс: `app/docs/design/`); верхние табы «Документы» / «Чат», настройки по иконке шестерёнки; на экране чата слева список чатов, история сообщений, нижний composer (`#chat-thread-list`, `#message-composer`).
+
+### Changed
+
+- `GET /v1/health` и OpenAPI: версия **0.4.0**; `pyproject.toml`: `version = 0.4.0`.
+- Веб-админка: drag-and-drop зона загрузки на «Документы»; боковая панель переключается по разделу (чаты только на вкладке «Чат»).
+
 ## 2026-04-27
 
 ### Added
 
+- Режим отладки: заголовок `X-Debug: 1` (чекбокс «Debug» в Настройках веб-админки) — `POST /v1/.../chat` пишет на сервер шаги RAG/LLM; при 500 в теле ответа (если `APP_ALLOW_CLIENT_DEBUG` не отключён) — `detail` с `error`, `type`, `trace`. Логи `app`/`app.chat_service` в консоли; `APP_ALLOW_CLIENT_DEBUG` в `app/config.py`, `.env.example`. Audit при сбое логируется, ответ чата не теряется.
+- Локальный кэш дистрибутивов: каталог `local-dist/` (в `.gitignore`) — `scripts/refresh-local-dist.ps1` скачивает в `local-dist/wheels` актуальные pip/setuptools/wheel и зависимости из `pyproject.toml` (перезапись при обновлении); `-IncludeDockerBase` сохраняет tar базового образа в `local-dist/docker` для `docker load` без Docker Hub. `scripts/refresh-wheels-in-linux-container.ps1` — wheels для **linux**-образа (актуально с Windows + `Dockerfile.wheels`). `scripts/docker-load-base-image-from-cache.ps1` — загрузка сохранённого tar. `scripts/pip-install-editable.ps1` — флаги `-UseLocalDist` и `-TryOnlineFirst`. `Dockerfile.wheels` + `docker-compose.wheels.yml` — сборка образа без PyPI, только из `local-dist/wheels`.
+- `scripts/docker-ensure-base-image.ps1` — перед сборкой: локальный `FROM` или `docker load` из tar (обход `context deadline exceeded` к Docker Hub). `scripts/compose-up.ps1` — обёртка над `docker compose up --build` после `docker-ensure-base-image`.
+- `GET /v1/health`: поле `auth_configured` (true, если задан любой из `APP_API_KEY` / `APP_ADMIN_KEY` / `APP_MEMBER_KEY`) — публичный сигнал для веб-админки; без ключей (dev) — `false`.
+- Веб-админка: левое боковое меню (Документы / Чат / Настройки) с кнопкой сворачивания; по умолчанию открывается экран «Чат»; выбор раздела для чата — выпадающий список; поле `X-API-Key` и работа с localStorage — только при `auth_configured` (в dev без ключей — подсказка без поля; Health в «Настройки»).
+- Персист: последний выбранный раздел хранится в `localStorage` (`knowledge_selected_cid`).
 - Веб-админка: при отправке сообщения в чат показывается индикатор «LLM в работе…» (спиннер) справа от кнопки «Отправить», кнопка блокируется до ответа.
 
 ### Changed
@@ -67,7 +99,7 @@
 
 ### Changed
 
-- Версия API-пакета / health: `0.3.0`.
+- Версия API-пакета / health: `0.3.0` (с 2026-04-28 — `0.4.0`, см. верх `CHANGELOG`).
 - `pyproject.toml`: `[build-system]` и явный поиск пакета `app` для `pip install -e .`.
 
 ### Docs

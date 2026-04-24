@@ -17,6 +17,10 @@ services:
       APP_EXPOSED_PORT: ${KNOWLEDGE_API_PORT:-8002}
     env_file:
       - app/.env
+    # Снижает Errno -3 (Temporary failure in name resolution) в Linux/Docker, если resolv хоста/ВПН отдаёт битый DNS.
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       - knowledge_data:/data
     restart: unless-stopped

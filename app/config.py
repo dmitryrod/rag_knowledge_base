@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,15 @@ class Settings(BaseSettings):
 
     polza_api_key: str | None = None
     polza_base_url: str = "https://polza.ai/api/v1"
+
+    @field_validator("polza_base_url")
+    @classmethod
+    def _polza_base_url_has_scheme(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s.startswith(("http://", "https://")):
+            msg = "POLZA_BASE_URL must be an absolute URL (http:// or https://)"
+            raise ValueError(msg)
+        return s
     polza_chat_model: str = "openai/gpt-4o-mini"
     polza_temperature: float = Field(
         0.0,
@@ -48,6 +57,15 @@ class Settings(BaseSettings):
     chunk_overlap: int = 120
     max_upload_mb: int = 10
     retrieval_top_k: int = 8
+    # Если false — даже при X-Debug: 1 в ответ не отдаётся traceback (только серверные логи)
+    allow_client_debug: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("APP_ALLOW_CLIENT_DEBUG", "APP_CLIENT_DEBUG"),
+    )
+    # Браузер: префикс для fetch() к API (когда UI открыт с другого origin/порта). Без слеша на конце.
+    app_public_base_url: str = Field(default="", validation_alias=AliasChoices("APP_PUBLIC_BASE_URL"))
+    # CORS: через запятую (http://a:3000) или * — иначе «Failed to fetch» при веб-UI не с того origin.
+    app_cors_origins: str = Field(default="*", validation_alias=AliasChoices("APP_CORS_ORIGINS"))
 
 
 def get_settings() -> Settings:

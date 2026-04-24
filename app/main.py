@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
+from starlette.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.deps import init_stores
@@ -21,6 +24,25 @@ def _listen_port() -> int:
     """Порт HTTP-сервера (как у uvicorn: PORT / APP_PORT, иначе 8000)."""
     raw = os.environ.get("PORT") or os.environ.get("APP_PORT") or "8000"
     return int(raw)
+
+
+def _cors_allow_origins() -> list[str]:
+    s = (get_settings().app_cors_origins or "*").strip()
+    if s == "*":
+        return ["*"]
+    return [x.strip() for x in s.split(",") if x.strip()]
+
+
+def _inject_index_html() -> str:
+    """Подставляет window.__API_BASE__ для fetch() при APP_PUBLIC_BASE_URL."""
+    path = _STATIC / "index.html"
+    raw = path.read_text(encoding="utf-8")
+    base = (get_settings().app_public_base_url or "").strip().rstrip("/")
+    inject = f"window.__API_BASE__ = {json.dumps(base)};\n    "
+    marker = "  <script>\n"
+    if marker not in raw:
+        return raw
+    return raw.replace(marker, f"  <script>\n    {inject}", 1)
 
 
 def _print_open_urls() -> None:
@@ -48,6 +70,13 @@ def _print_open_urls() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+        force=True,
+    )
+    logging.getLogger("app").setLevel(logging.INFO)
     settings = get_settings()
     init_stores(settings)
     _print_open_urls()
@@ -57,20 +86,25 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Knowledge workspace",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
 
     @app.get("/", include_in_schema=False)
-    def admin_index() -> FileResponse:
-        """Корень: статическая веб-админка (см. app/static/index.html)."""
-        return FileResponse(
-            _STATIC / "index.html",
-            media_type="text/html; charset=utf-8",
-        )
+    def admin_index() -> HTMLResponse:
+        """Корень: веб-админка; HTML подставляет __API_BASE__ при APP_PUBLIC_BASE_URL."""
+        return HTMLResponse(content=_inject_index_html(), status_code=200)
 
     app.include_router(public, prefix="/v1", tags=["health"])
     app.include_router(router, prefix="/v1", tags=["api"])
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_allow_origins(),
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
     return app
 
 

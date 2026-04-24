@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.chroma_store import ChromaStore
 from app.config import Settings
 from app import llm as llm_mod
+
+_log = logging.getLogger(__name__)
 
 
 def build_context_block(chunks: list[dict[str, Any]]) -> str:
@@ -26,12 +29,29 @@ def run_chat(
     store: ChromaStore,
     collection_id: str,
     user_message: str,
+    *,
+    debug: bool = False,
 ) -> dict[str, Any]:
-    chunks = store.query(
-        collection_id,
-        user_message,
-        n_results=settings.retrieval_top_k,
-    )
+    if debug:
+        _log.info(
+            "run_chat: start collection_id=%s message_len=%s retrieval_top_k=%s polza_set=%s egress=%s",
+            collection_id,
+            len(user_message),
+            settings.retrieval_top_k,
+            bool(settings.polza_api_key),
+            settings.allow_llm_egress,
+        )
+    try:
+        chunks = store.query(
+            collection_id,
+            user_message,
+            n_results=settings.retrieval_top_k,
+        )
+    except Exception:
+        _log.exception("run_chat: Chroma store.query failed collection_id=%s", collection_id)
+        raise
+    if debug:
+        _log.info("run_chat: retrieved chunks count=%s", len(chunks))
     if not chunks:
         return {
             "answer": "НЕ НАЙДЕНО В БАЗЕ: в индексе нет фрагментов для запроса.",
@@ -66,6 +86,8 @@ def run_chat(
     ]
 
     use_remote_llm = bool(settings.polza_api_key) and settings.allow_llm_egress
+    if debug:
+        _log.info("run_chat: use_remote_llm=%s", use_remote_llm)
 
     if not use_remote_llm:
         parts = ["[Локальный контур] LLM не вызывается."]
@@ -81,7 +103,15 @@ def run_chat(
             "demo_mode": True,
         }
 
-    raw = llm_mod.chat_completion(settings, messages)
+    if debug:
+        _log.info("run_chat: calling Polza model=%s", settings.polza_chat_model)
+    try:
+        raw = llm_mod.chat_completion(settings, messages)
+    except Exception:
+        _log.exception("run_chat: llm.chat_completion failed")
+        raise
+    if debug:
+        _log.info("run_chat: LLM response raw_len=%s", len(raw) if raw else 0)
     try:
         parsed = llm_mod.parse_json_response(raw)
     except json.JSONDecodeError:  # type: ignore[misc]

@@ -1,0 +1,14 @@
+# Подключает Dockerfile.wheels: pip только из local-dist/wheels (без PyPI внутри build).
+# Предусловия:
+# 1) .\scripts\refresh-local-dist.ps1
+# 2) если Docker Hub недоступен: сначала docker load -i local-dist\docker\python-3.12-slim-bookworm.tar
+#    (создаётся refresh-local-dist.ps1 -IncludeDockerBase)
+#
+# Сборка: docker compose -f docker-compose.yml -f docker-compose.wheels.yml build
+# Запуск:  docker compose -f docker-compose.yml -f docker-compose.wheels.yml up
+services:
+  knowledge-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.wheels
+    image: marketing-product-knowledge-api:local

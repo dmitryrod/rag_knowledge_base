@@ -7,16 +7,19 @@
 | Компонент | Файлы | Роль |
 |-----------|--------|------|
 | Конфиг | `app/config.py` | `APP_DATA_DIR`, Polza, размеры чанков и retrieval |
-| Метаданные | `app/db_sqlite.py` | Разделы, документы, audit log |
+| Метаданные | `app/db_sqlite.py` | Разделы, документы, audit log, **чаты** (`chat_threads`, `chat_messages`) |
 | Векторы | `app/chroma_store.py` | Chroma per-collection, эмбеддинги по умолчанию |
 | Ingest | `app/ingest.py` | Извлечение текста (PDF/DOCX/…), chunking |
 | Чат | `app/chat_service.py`, `app/llm.py` | RAG → Polza или demo-режим без ключа |
-| API | `app/routers/api.py`, `app/main.py` | `GET /` — HTML веб-админка (`app/static/index.html`); `GET /v1/health` публично; остальное под ключом при настройке `APP_*_KEY` |
-| RBAC | `app/auth_dep.py` | `admin`: разделы, ingest, audit; `member`: чтение + чат + export |
+| API | `app/routers/api.py`, `app/main.py` | `GET /` — HTML веб-админка (`app/static/index.html`, табы Документы/Чат, настройки, чат с несколькими тредами); `GET /v1/health` публично (`version` **0.4.0**); RAG-чат: `POST /v1/collections/{id}/chat` (без истории в БД) и **потоки** `/v1/chat/threads/...` (история в SQLite); `X-Debug` + `app/debug_dep.py` |
+| Офлайн-кэш | `local-dist/` (gitignore), `scripts/refresh-local-dist.ps1`, `Dockerfile.wheels` | Кэш pip-wheels и опционально tar базового Docker-образа; альтернативная сборка: `docker-compose.wheels.yml` |
+| RBAC | `app/auth_dep.py` | `admin`: разделы, ingest, audit; `member`: чтение + чат + export + **потоки чата** (`/v1/chat/...`) |
 | Политика LLM | `app/config.py`, проверки в `api.py` / `chat_service.py` | `ALLOW_LLM_EGRESS`, allowlist модели, без egress — retrieval + цитаты без вызова Polza |
 | Зависимости контекста | `app/deps.py` | `init_stores` в lifespan: SQLite + Chroma под `data_dir` |
 
 `pyproject.toml` в корне workspace задаёт зависимости и entrypoint `knowledge-api`. Тесты: `app/tests/test_api.py` (обязателен контекстный менеджер `TestClient`, иначе lifespan не вызывается).
+
+**Поток чата с историей:** клиент создаёт `chat_thread` с привязкой к `collection_id` → сообщения `POST .../threads/{id}/messages` сохраняют user-текст, вызывают `run_chat` по тому же разделу, сохраняют ответ ассистента и `citations` в `chat_messages`. Референс UI/токенов: `app/docs/design/`.
 
 ## Инварианты
 
