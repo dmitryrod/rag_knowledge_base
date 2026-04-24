@@ -12,9 +12,11 @@
 - Хранение: SQLite для метаданных, audit и истории чатов; Chroma для векторного индекса.
 - RAG-чат по одному, нескольким или всем разделам с обязательными citations.
 - No-egress режим по умолчанию: без внешнего LLM приложение возвращает retrieval-ответ с цитатами.
-- Опциональный Polza/OpenAI-compatible LLM через `POLZA_*`, `ALLOW_LLM_EGRESS` и allowlist моделей.
+- Опциональный [PolzaAI](https://polza.ai?referral=VhrEf0gn4S)/OpenAI-compatible LLM через `POLZA_*`, `ALLOW_LLM_EGRESS` и allowlist моделей.
 - Опциональный RBAC по ключам: `admin` для ingest/audit/удаления, `member` для чтения и чата.
 - Docker Compose запуск и offline-сценарии через локальный кэш wheels/base image.
+
+* ИИ-модели в скрипте используются с сервиса [PolzaAI](https://polza.ai?referral=VhrEf0gn4S), скрипт написан под его API.
 
 ## Быстрый старт через Docker
 
