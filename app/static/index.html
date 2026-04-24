@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knowledge — админка</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --text: #e6edf3; --muted: #8b9cb3; --acc: #3d8bfd; --err: #f85149; --ok: #3fb950; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1rem 1.5rem; max-width: 960px; margin-left: auto; margin-right: auto; }
+    h1 { font-size: 1.25rem; font-weight: 600; }
+    a { color: var(--acc); }
+    .card { background: var(--card); border-radius: 8px; padding: 1rem; margin: 0.75rem 0; }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+    input[type="text"], input[type="password"], textarea, select { width: 100%; padding: 0.5rem; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: var(--text); }
+    button { background: #238636; color: #fff; border: 0; padding: 0.45rem 0.9rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    button.secondary { background: #21262d; }
+    button.danger { background: #da3633; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .status { font-size: 0.85rem; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    pre, .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #30363d; }
+    footer { margin-top: 2rem; font-size: 0.8rem; color: var(--muted); }
+    #chatLoaderWrap { display: none; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+    #chatLoaderWrap.visible { display: inline-flex; }
+    .chat-spin {
+      width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: var(--acc);
+      border-radius: 50%; animation: chatSpin 0.7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes chatSpin { to { transform: rotate(360deg); } }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>Knowledge — веб-админка</h1>
+  <p class="status" id="headStatus"></p>
+
+  <div class="card">
+    <label for="apiKey">X-API-Key (если заданы ключи на сервере; для dev без ключей — пусто)</label>
+    <div class="row">
+      <input type="password" id="apiKey" placeholder="оставь пустым в dev" autocomplete="off" style="flex:1;min-width:200px" />
+      <button type="button" class="secondary" id="saveKey">Сохранить в сессии</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong>Health</strong>
+    <p class="status" id="healthOut">—</p>
+  </div>
+
+  <div class="card">
+    <strong>Разделы</strong>
+    <div class="row" style="margin-top:0.5rem">
+      <input type="text" id="newColName" placeholder="Имя нового раздела" style="max-width:280px" />
+      <button type="button" id="btnCreateCol">Создать (admin)</button>
+      <button type="button" class="secondary" id="btnRefreshCols">Обновить список</button>
+    </div>
+    <div id="colErr" class="status err"></div>
+    <table id="tblCols"><thead><tr><th>ID</th><th>Имя</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card" id="colPanel" style="display:none">
+    <strong>Раздел: <span id="selName"></span></strong>
+    <p class="mono" id="selId"></p>
+    <div class="row" style="margin:0.5rem 0">
+      <input type="file" id="fileIn" />
+      <button type="button" id="btnUpload">Загрузить</button>
+      <button type="button" class="danger" id="btnDelCol">Удалить раздел</button>
+    </div>
+    <div id="docErr" class="status err"></div>
+    <table id="tblDocs"><thead><tr><th>Документ</th><th></th></tr></thead><tbody></tbody></table>
+
+    <label style="margin-top:0.75rem">Чат</label>
+    <textarea id="chatIn" rows="3" placeholder="Вопрос по разделу"></textarea>
+    <div class="row" style="margin-top:0.5rem">
+      <button type="button" id="btnChat">Отправить</button>
+      <div id="chatLoaderWrap" aria-live="polite" aria-atomic="true">
+        <span class="chat-spin" aria-hidden="true"></span>
+        <span>В работе…</span>
+      </div>
+    </div>
+    <div id="chatOut" class="mono" style="margin-top:0.5rem"></div>
+  </div>
+
+  <footer>
+    <a href="/docs">OpenAPI (Swagger)</a> · <a href="/redoc">ReDoc</a> — отладка и контракт API.
+  </footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const keyStore = "knowledge_api_key";
+    if (localStorage.getItem(keyStore)) $("apiKey").value = localStorage.getItem(keyStore);
+
+    function headers(json) {
+      const h = {};
+      if (json) h["Content-Type"] = "application/json";
+      const k = $("apiKey").value.trim();
+      if (k) h["X-API-Key"] = k;
+      return h;
+    }
+    function errBox(el, e) { el.textContent = e || ""; }
+    function showHead(s, ok) {
+      const n = $("headStatus");
+      n.textContent = s; n.className = "status " + (ok ? "ok" : "err");
+    }
+
+    $("saveKey").onclick = () => {
+      localStorage.setItem(keyStore, $("apiKey").value.trim());
+      showHead("Ключ сохранён в localStorage (этого браузера).", true);
+    };
+
+    let selectedCid = null;
+
+    async function loadHealth() {
+      try {
+        const r = await fetch("/v1/health");
+        const j = await r.json();
+        $("healthOut").textContent = JSON.stringify(j, null, 2);
+        $("healthOut").className = "status ok";
+      } catch (e) {
+        $("healthOut").textContent = String(e);
+        $("healthOut").className = "status err";
+      }
+    }
+
+    async function loadCollections() {
+      errBox($("colErr"), "");
+      const tb = document.querySelector("#tblCols tbody");
+      tb.innerHTML = "";
+      try {
+        const r = await fetch("/v1/collections", { headers: headers(false) });
+        if (!r.ok) throw new Error(r.status + " " + (await r.text()));
+        const rows = await r.json();
+        for (const c of rows) {
+          const tr = document.createElement("tr");
+          const tId = document.createElement("td"); tId.className = "mono"; tId.textContent = c.id;
+          const tNm = document.createElement("td"); tNm.textContent = c.name;
+          const tAct = document.createElement("td");
+          const b = document.createElement("button"); b.className = "secondary"; b.textContent = "Открыть";
+          b.onclick = () => {
+            selectedCid = c.id;
+            $("selName").textContent = c.name;
+            $("selId").textContent = c.id;
+            $("colPanel").style.display = "block";
+            loadDocs();
+          };
+          tAct.appendChild(b);
+          tr.appendChild(tId); tr.appendChild(tNm); tr.appendChild(tAct);
+          tb.appendChild(tr);
+        }
+      } catch (e) {
+        errBox($("colErr"), String(e));
+      }
+    }
+    $("btnRefreshCols").onclick = loadCollections;
+    $("btnCreateCol").onclick = async () => {
+      errBox($("colErr"), "");
+      const name = $("newColName").value.trim();
+      if (!name) return;
+      try {
+        const r = await fetch("/v1/collections", { method: "POST", headers: headers(true), body: JSON.stringify({ name }) });
+        if (!r.ok) throw new Error(await r.text());
+        $("newColName").value = "";
+        await loadCollections();
+      } catch (e) { errBox($("colErr"), String(e)); }
+    };
+
+    async function loadDocs() {
+      errBox($("docErr"), "");
+      const tb = document.querySelector("#tblDocs tbody");
+      tb.innerHTML = "";
+      if (!selectedCid) return;
+      try {
+        const r = await fetch("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents", { headers: headers(false) });
+        if (!r.ok) throw new Error(await r.text());
+        const rows = await r.json();
+        for (const d of rows) {
+          const tr = document.createElement("tr");
+          const did = d.id;
+          const t0 = document.createElement("td"); t0.textContent = d.filename || did;
+          const t1 = document.createElement("td");
+          const del = document.createElement("button"); del.className = "danger"; del.textContent = "Удалить";
+          del.onclick = async () => {
+            try {
+              const rr = await fetch("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents/" + encodeURIComponent(did), { method: "DELETE", headers: headers(false) });
+              if (!rr.ok) throw new Error(await rr.text());
+              loadDocs();
+            } catch (e) { errBox($("docErr"), String(e)); }
+          };
+          t1.appendChild(del);
+          tr.appendChild(t0); tr.appendChild(t1);
+          tb.appendChild(tr);
+        }
+      } catch (e) { errBox($("docErr"), String(e)); }
+    }
+
+    $("btnUpload").onclick = async () => {
+      errBox($("docErr"), "");
+      const f = $("fileIn").files[0];
+      if (!f || !selectedCid) return;
+      const fd = new FormData();
+      fd.append("file", f);
+      try {
+        const r = await fetch("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents", { method: "POST", headers: { ...($("apiKey").value.trim() ? { "X-API-Key": $("apiKey").value.trim() } : {}) }, body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        loadDocs();
+      } catch (e) { errBox($("docErr"), String(e)); }
+    };
+
+    $("btnDelCol").onclick = async () => {
+      if (!selectedCid || !confirm("Удалить раздел и индекс?")) return;
+      errBox($("colErr"), "");
+      try {
+        const r = await fetch("/v1/collections/" + encodeURIComponent(selectedCid), { method: "DELETE", headers: headers(false) });
+        if (!r.ok) throw new Error(await r.text());
+        selectedCid = null;
+        $("colPanel").style.display = "none";
+        loadCollections();
+      } catch (e) { errBox($("colErr"), String(e)); }
+    };
+
+    const chatLoader = $("chatLoaderWrap");
+    function setChatLoading(on) {
+      if (on) {
+        chatLoader.classList.add("visible");
+        $("btnChat").disabled = true;
+      } else {
+        chatLoader.classList.remove("visible");
+        $("btnChat").disabled = false;
+      }
+    }
+
+    $("btnChat").onclick = async () => {
+      $("chatOut").textContent = "";
+      const msg = $("chatIn").value.trim();
+      if (!msg || !selectedCid) return;
+      setChatLoading(true);
+      try {
+        const r = await fetch("/v1/collections/" + encodeURIComponent(selectedCid) + "/chat", { method: "POST", headers: headers(true), body: JSON.stringify({ message: msg }) });
+        const t = await r.text();
+        if (!r.ok) throw new Error(t);
+        const j = JSON.parse(t);
+        $("chatOut").textContent = (j.answer || "") + "\n\n--- citations ---\n" + JSON.stringify(j.citations || [], null, 2);
+      } catch (e) {
+        $("chatOut").textContent = String(e);
+      } finally {
+        setChatLoading(false);
+      }
+    };
+
+    loadHealth();
+    loadCollections();
+  </script>
+</body>
+</html>

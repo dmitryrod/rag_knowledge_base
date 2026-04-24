@@ -1,0 +1,14 @@
+# Перед `docker compose up`: копирует app/.env.example -> app/.env, если .env нет
+$ErrorActionPreference = "Stop"
+$Root = Split-Path -Parent $PSScriptRoot
+$envExample = Join-Path $Root "app\.env.example"
+$envTarget = Join-Path $Root "app\.env"
+if (Test-Path $envTarget) {
+    Write-Host "app/.env already exists" -ForegroundColor Cyan
+    exit 0
+}
+if (-not (Test-Path $envExample)) {
+    Write-Error "Missing app/.env.example"
+}
+Copy-Item $envExample $envTarget
+Write-Host "Created app/.env from app/.env.example" -ForegroundColor Green

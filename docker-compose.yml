@@ -1,0 +1,25 @@
+# Сборка/запуск: docker compose up --build  |  docker compose up -d  |  docker-compose up -d
+# Порт на хосте по умолчанию 8002 (8000 часто занят другим stack: app-1:8000). Переопределение: KNOWLEDGE_API_PORT в .env в корне репо.
+# Перед первым запуском: copy app\.env.example app\.env (файл нужен; для dev достаточно пустых ключей) или scripts\ensure-app-env.ps1
+
+services:
+  knowledge-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: marketing-product-knowledge-api:local
+    container_name: marketing-product-knowledge-api
+    ports:
+      - "${KNOWLEDGE_API_PORT:-8002}:8000"
+    environment:
+      APP_DATA_DIR: /data
+      # Показывать в логе старта ссылку с портом хоста (http://127.0.0.1:…), а не внутри контейнера
+      APP_EXPOSED_PORT: ${KNOWLEDGE_API_PORT:-8002}
+    env_file:
+      - app/.env
+    volumes:
+      - knowledge_data:/data
+    restart: unless-stopped
+
+volumes:
+  knowledge_data:
