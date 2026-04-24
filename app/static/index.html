@@ -243,6 +243,19 @@
       font-family: inherit;
       min-width: 200px;
     }
+    .rag-scope-box { display: flex; flex-direction: column; gap: 0.35rem; min-width: 220px; max-width: min(100%, 440px); }
+    .rag-scope-label { font-size: 0.75rem; color: var(--on-surface-variant); margin: 0; }
+    .rag-scope-mount { display: flex; flex-direction: column; gap: 0.35rem; }
+    .rag-all-row { display: flex; align-items: center; gap: 0.5rem; }
+    .rag-all-row input { width: auto; margin: 0; cursor: pointer; }
+    .rag-col-list {
+      display: flex; flex-direction: column; gap: 0.25rem; max-height: 140px; overflow-y: auto;
+      padding: 0.35rem 0.5rem; border: 1px solid var(--ghost-border); border-radius: var(--radius-md);
+      background: var(--surface-container-low);
+    }
+    .rag-col-list label { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; font-size: 0.8125rem; color: var(--on-surface); margin: 0; }
+    .rag-col-list input { width: auto; margin: 0; flex-shrink: 0; cursor: pointer; }
+    .rag-col-list.disabled { opacity: 0.45; pointer-events: none; }
     #chat-messages {
       flex: 1;
       min-height: 0;
@@ -516,9 +529,9 @@
         <div id="view-chat" class="view active">
           <div class="chat-layout">
             <div class="chat-toolbar">
-              <div>
-                <label for="chatColSelect">Раздел для RAG</label>
-                <select id="chatColSelect"></select>
+              <div class="rag-scope-box">
+                <p class="rag-scope-label">Разделы для RAG</p>
+                <div id="ragScopeMount" class="rag-scope-mount" aria-label="Выбор разделов для поиска"></div>
               </div>
               <p id="chatNoColHint" class="status err hidden" style="margin:0">Создайте раздел на «Документы».</p>
             </div>
@@ -578,8 +591,10 @@
     const keyStore = "knowledge_api_key";
     const debugStore = "knowledge_debug";
     const cidStore = "knowledge_selected_cid";
+    const ragScopeStore = "knowledge_rag_scope";
     const threadStore = "knowledge_active_thread_id";
     let selectedCid = null;
+    let ragScope = { all: true, ids: [] };
     let activeThreadId = null;
     let authConfigured = false;
     const collections = [];
@@ -671,47 +686,131 @@
       }
     }
 
-    function syncChatSelect() {
-      const sel = $("chatColSelect");
-      const cur = selectedCid;
-      sel.innerHTML = "";
-      const opt0 = document.createElement("option");
-      opt0.value = "";
-      opt0.textContent = collections.length ? "— выберите раздел —" : "— нет разделов —";
-      sel.appendChild(opt0);
-      for (const c of collections) {
-        const o = document.createElement("option");
-        o.value = c.id;
-        o.textContent = c.name + " (" + c.id.slice(0, 8) + "…)";
-        if (c.id === cur) o.selected = true;
-        sel.appendChild(o);
-      }
-      if (cur && !collections.some((c) => c.id === cur)) {
-        selectedCid = null;
-        localStorage.removeItem(cidStore);
-      } else if (cur) sel.value = cur;
-      $("chatNoColHint").classList.toggle("hidden", collections.length > 0 && selectedCid);
+    function getRagScopeObject() {
+      if (ragScope.all) return { all: true };
+      const ids = (ragScope.ids || []).filter((id) => collections.some((c) => c.id === id));
+      if (!ids.length) return { all: true };
+      return { ids: [...ids].sort() };
     }
 
-    $("chatColSelect").onchange = async () => {
-      const v = $("chatColSelect").value;
-      selectedCid = v || null;
-      if (selectedCid) localStorage.setItem(cidStore, selectedCid);
-      else localStorage.removeItem(cidStore);
-      const c = collections.find((x) => x.id === selectedCid);
-      if (c) {
-        $("selName").textContent = c.name;
-        $("selId").textContent = c.id;
-        $("colPanel").classList.remove("hidden");
+    function loadRagScopeFromStorage() {
+      try {
+        const raw = localStorage.getItem(ragScopeStore);
+        if (raw) {
+          const j = JSON.parse(raw);
+          if (j && j.all === true) {
+            ragScope = { all: true, ids: [] };
+            pruneRagIdsToExisting();
+            return;
+          }
+          if (j && Array.isArray(j.ids) && j.ids.length) {
+            ragScope = { all: false, ids: j.ids.slice() };
+            pruneRagIdsToExisting();
+            return;
+          }
+        }
+      } catch (e) { /* ignore */ }
+      const legacy = localStorage.getItem(cidStore);
+      if (legacy && collections.some((c) => c.id === legacy)) {
+        ragScope = { all: false, ids: [legacy] };
       } else {
-        $("colPanel").classList.add("hidden");
+        ragScope = { all: true, ids: [] };
       }
-      await loadDocs();
-      $("chatNoColHint").classList.toggle("hidden", collections.length > 0 && selectedCid);
+      pruneRagIdsToExisting();
+    }
+
+    function pruneRagIdsToExisting() {
+      if (ragScope.all) return;
+      const ids = (ragScope.ids || []).filter((id) => collections.some((c) => c.id === id));
+      if (!ids.length) {
+        ragScope = { all: true, ids: [] };
+        localStorage.setItem(ragScopeStore, JSON.stringify({ all: true }));
+      } else {
+        ragScope = { all: false, ids };
+      }
+    }
+
+    function saveRagScope() {
+      const o = getRagScopeObject();
+      if (o.all) localStorage.setItem(ragScopeStore, JSON.stringify({ all: true }));
+      else localStorage.setItem(ragScopeStore, JSON.stringify({ ids: o.ids }));
+    }
+
+    function canUseChatRag() {
+      if (!collections.length) return false;
+      const o = getRagScopeObject();
+      if (o.all) return true;
+      return !!(o.ids && o.ids.length);
+    }
+
+    function onRagScopeChanged() {
       activeThreadId = null;
       localStorage.removeItem(threadStore);
-      await loadThreads();
-    };
+      $("chatNoColHint").classList.toggle("hidden", canUseChatRag());
+      loadThreads();
+    }
+
+    function buildRagScopeUi() {
+      const mount = $("ragScopeMount");
+      if (!mount) return;
+      mount.innerHTML = "";
+      if (!collections.length) return;
+      const allRow = document.createElement("div");
+      allRow.className = "rag-all-row";
+      const allCb = document.createElement("input");
+      allCb.type = "checkbox";
+      allCb.id = "ragAllCb";
+      allCb.checked = !!ragScope.all;
+      const allLbl = document.createElement("label");
+      allLbl.htmlFor = "ragAllCb";
+      allLbl.textContent = "Все разделы";
+      allRow.appendChild(allCb);
+      allRow.appendChild(allLbl);
+      mount.appendChild(allRow);
+      const list = document.createElement("div");
+      list.className = "rag-col-list" + (ragScope.all ? " disabled" : "");
+      list.id = "ragColList";
+      for (const c of collections) {
+        const row = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.dataset.cid = c.id;
+        if (!ragScope.all && (ragScope.ids || []).includes(c.id)) cb.checked = true;
+        const span = document.createElement("span");
+        span.textContent = c.name + " (" + c.id.slice(0, 8) + "…)";
+        row.appendChild(cb);
+        row.appendChild(span);
+        list.appendChild(row);
+      }
+      mount.appendChild(list);
+      allCb.onchange = () => {
+        if (allCb.checked) {
+          ragScope = { all: true, ids: [] };
+        } else {
+          let ids = (ragScope.ids || []).filter((id) => collections.some((c) => c.id === id));
+          if (!ids.length && collections[0]) ids = [collections[0].id];
+          ragScope = { all: false, ids };
+        }
+        saveRagScope();
+        buildRagScopeUi();
+        onRagScopeChanged();
+      };
+      list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+        cb.onchange = () => {
+          if (ragScope.all) return;
+          const picked = Array.from(list.querySelectorAll("input[type=checkbox]"))
+            .filter((x) => x.checked)
+            .map((x) => x.dataset.cid);
+          if (!picked.length) {
+            cb.checked = true;
+            return;
+          }
+          ragScope = { all: false, ids: picked };
+          saveRagScope();
+          onRagScopeChanged();
+        };
+      });
+    }
 
     function selectCollection(c) {
       selectedCid = c.id;
@@ -719,7 +818,6 @@
       $("selName").textContent = c.name;
       $("selId").textContent = c.id;
       $("colPanel").classList.remove("hidden");
-      syncChatSelect();
       loadDocs();
     }
 
@@ -744,21 +842,21 @@
           tr.appendChild(tId); tr.appendChild(tNm); tr.appendChild(tAct);
           tb.appendChild(tr);
         }
-        syncChatSelect();
+        loadRagScopeFromStorage();
+        buildRagScopeUi();
         const saved = localStorage.getItem(cidStore);
         if (saved && collections.some((c) => c.id === saved)) {
-          selectCollection(collections.find((x) => x.id === saved));
-          $("chatColSelect").value = saved;
+          const c = collections.find((x) => x.id === saved);
+          if (c) selectCollection(c);
         } else if (!collections.length) {
           selectedCid = null;
           $("colPanel").classList.add("hidden");
-          syncChatSelect();
         }
-        $("chatNoColHint").classList.toggle("hidden", collections.length > 0 && selectedCid);
+        $("chatNoColHint").classList.toggle("hidden", canUseChatRag());
         await loadThreads();
       } catch (e) {
         errBox($("colErr"), String(e));
-        syncChatSelect();
+        buildRagScopeUi();
       }
     }
     $("btnRefreshCols").onclick = loadCollections;
@@ -954,14 +1052,19 @@
     async function loadThreads() {
       const ul = $("chat-thread-list");
       ul.innerHTML = "";
-      if (!selectedCid) {
+      if (!canUseChatRag()) {
         $("btnNewChat").disabled = true;
         renderMessages([]);
         return;
       }
       $("btnNewChat").disabled = false;
       try {
-        const r = await fetch(apiPath("/v1/chat/threads?collection_id=" + encodeURIComponent(selectedCid)), { headers: headers(false) });
+        const o = getRagScopeObject();
+        const ragParam = o.all ? JSON.stringify({ all: true }) : JSON.stringify({ ids: o.ids });
+        const r = await fetch(
+          apiPath("/v1/chat/threads?rag=" + encodeURIComponent(ragParam)),
+          { headers: headers(false) }
+        );
         if (!r.ok) throw new Error(await r.text());
         const threads = await r.json();
         const saved = localStorage.getItem(threadStore);
@@ -1057,12 +1160,14 @@
     }
 
     $("btnNewChat").onclick = async () => {
-      if (!selectedCid) return;
+      if (!canUseChatRag()) return;
+      const o = getRagScopeObject();
+      const body = o.all ? { rag: { all: true } } : { rag: { ids: o.ids } };
       try {
         const r = await fetch(apiPath("/v1/chat/threads"), {
           method: "POST",
           headers: headers(true),
-          body: JSON.stringify({ collection_id: selectedCid }),
+          body: JSON.stringify(body),
         });
         if (!r.ok) throw new Error(await r.text());
         const t = await r.json();
@@ -1081,7 +1186,7 @@
     async function sendChat() {
       const msg = $("chatIn").value.trim();
       if (!msg) return;
-      if (!selectedCid) { showHead("Выберите раздел.", false); return; }
+      if (!canUseChatRag()) { showHead("Выберите раздел(ы) для RAG или создайте раздел.", false); return; }
       if (!activeThreadId) { showHead("Создайте или выберите чат.", false); return; }
       setChatLoading(true);
       $("chatIn").value = "";

@@ -7,8 +7,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: marketing-product-knowledge-api:local
-    container_name: marketing-product-knowledge-api
+    image: rag_knowledge_base-knowledge-api:local
+    container_name: rag_knowledge_base-knowledge-api
     ports:
       - "${KNOWLEDGE_API_PORT:-8002}:8000"
     environment:

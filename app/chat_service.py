@@ -13,42 +13,67 @@ from app import llm as llm_mod
 _log = logging.getLogger(__name__)
 
 
-def build_context_block(chunks: list[dict[str, Any]]) -> str:
+def build_context_block(
+    chunks: list[dict[str, Any]],
+    *,
+    collection_labels: dict[str, str] | None = None,
+) -> str:
+    labels = collection_labels or {}
     lines: list[str] = []
     for i, ch in enumerate(chunks, start=1):
         cid = ch.get("chunk_id", "")
         meta = ch.get("metadata") or {}
         fn = meta.get("filename", "")
         text = ch.get("text", "")
-        lines.append(f"[{i}] chunk_id={cid} filename={fn}\n{text}")
+        src = ch.get("source_collection_id")
+        sec = ""
+        if src:
+            label = labels.get(str(src), str(src)[:8] + "…")
+            sec = f" section={label}"
+        lines.append(f"[{i}] chunk_id={cid} filename={fn}{sec}\n{text}")
     return "\n\n---\n\n".join(lines)
 
 
 def run_chat(
     settings: Settings,
     store: ChromaStore,
-    collection_id: str,
     user_message: str,
     *,
+    collection_ids: list[str],
+    collection_labels: dict[str, str] | None = None,
     debug: bool = False,
 ) -> dict[str, Any]:
+    cids = [c for c in collection_ids if c]
+    if not cids:
+        return {
+            "answer": "НЕ НАЙДЕНО В БАЗЕ: не выбраны разделы для поиска.",
+            "citations": [],
+            "chunks_considered": 0,
+        }
     if debug:
         _log.info(
-            "run_chat: start collection_id=%s message_len=%s retrieval_top_k=%s polza_set=%s egress=%s",
-            collection_id,
+            "run_chat: start collection_ids=%s message_len=%s retrieval_top_k=%s polza_set=%s egress=%s",
+            cids,
             len(user_message),
             settings.retrieval_top_k,
             bool(settings.polza_api_key),
             settings.allow_llm_egress,
         )
     try:
-        chunks = store.query(
-            collection_id,
-            user_message,
-            n_results=settings.retrieval_top_k,
-        )
+        if len(cids) == 1:
+            chunks = store.query(
+                cids[0],
+                user_message,
+                n_results=settings.retrieval_top_k,
+            )
+        else:
+            chunks = store.query_multi(
+                cids,
+                user_message,
+                n_results=settings.retrieval_top_k,
+            )
     except Exception:
-        _log.exception("run_chat: Chroma store.query failed collection_id=%s", collection_id)
+        _log.exception("run_chat: Chroma query failed collection_ids=%s", cids)
         raise
     if debug:
         _log.info("run_chat: retrieved chunks count=%s", len(chunks))
@@ -70,7 +95,7 @@ def run_chat(
             )
         return out
 
-    context = build_context_block(chunks)
+    context = build_context_block(chunks, collection_labels=collection_labels)
     system = (
         "Ты корпоративный ассистент. Отвечай ТОЛЬКО на основе CONTEXT. "
         "Если фрагменты в CONTEXT относятся к вопросу — ответь по ним и обязательно заполни citations "

@@ -87,3 +87,37 @@ class ChromaStore:
                 }
             )
         return out
+
+    def query_multi(
+        self,
+        collection_ids: list[str],
+        query_text: str,
+        n_results: int,
+    ) -> list[dict[str, Any]]:
+        """Семантический поиск сразу по нескольким Chroma-коллекциям; слияние по distance (меньше — релевантнее)."""
+        ids = [c for c in collection_ids if c]
+        if not ids:
+            return []
+        if len(ids) == 1:
+            return self.query(ids[0], query_text, n_results)
+        n = max(1, int(n_results))
+        per = max(1, (n + len(ids) - 1) // len(ids))
+        per = min(max(per, 4), n)
+        merged: list[dict[str, Any]] = []
+        for cid in ids:
+            part = self.query(cid, query_text, n_results=per)
+            for ch in part:
+                row = {**ch, "source_collection_id": cid}
+                merged.append(row)
+
+        def _dist(x: dict[str, Any]) -> float:
+            d = x.get("distance")
+            if d is None:
+                return float("inf")
+            try:
+                return float(d)
+            except (TypeError, ValueError):
+                return float("inf")
+
+        merged.sort(key=_dist)
+        return merged[:n]

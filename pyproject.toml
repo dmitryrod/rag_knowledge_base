@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "marketing-product"
+name = "rag_knowledge_base"
 version = "0.4.0"
 description = "Local knowledge workspace MVP: RAG, citations, audit."
 requires-python = ">=3.11"

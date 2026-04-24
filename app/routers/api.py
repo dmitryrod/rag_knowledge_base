@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import traceback
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from fastapi import (
@@ -16,10 +17,17 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.auth_dep import get_auth, is_auth_configured, require_admin
 from app.chat_service import run_chat
+from app.rag_scope import (
+    RAG_ALL_PLACEHOLDER_ID,
+    collection_ids_for_retrieval,
+    normalize_id_list,
+    parse_rag_scope_json,
+    thread_matches_rag,
+)
 from app.config import Settings, get_settings, is_polza_model_allowlisted
 from app.debug_dep import is_client_debug
 from app import deps
@@ -53,8 +61,19 @@ class ChatOut(BaseModel):
 
 
 class ChatThreadCreate(BaseModel):
-    collection_id: str = Field(..., min_length=1, max_length=64)
+    """Создать тред: либо `collection_id` (один раздел), либо `rag` (все или несколько)."""
+
+    collection_id: str | None = Field(default=None, min_length=1, max_length=64)
     title: str | None = Field(default=None, max_length=256)
+    rag: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def one_scope_source(self) -> "ChatThreadCreate":
+        if self.rag is not None and self.collection_id is not None:
+            raise ValueError("Укажите либо collection_id, либо rag, не оба")
+        if self.rag is None and self.collection_id is None:
+            raise ValueError("Нужен collection_id или rag")
+        return self
 
 
 class ChatThreadOut(BaseModel):
@@ -63,6 +82,7 @@ class ChatThreadOut(BaseModel):
     title: str
     created_at: str
     updated_at: str
+    rag: dict | None = None
 
 
 class ChatThreadPatch(BaseModel):
@@ -76,6 +96,37 @@ class ChatMessageOut(BaseModel):
     content: str
     citations: list[dict]
     created_at: str
+
+
+def _thread_to_out(row: dict[str, Any]) -> ChatThreadOut:
+    return ChatThreadOut(
+        id=str(row["id"]),
+        collection_id=str(row["collection_id"]),
+        title=str(row["title"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        rag=row.get("rag"),
+    )
+
+
+def _retrieval_ids_and_labels(
+    thread_row: dict[str, Any],
+) -> tuple[list[str], dict[str, str]]:
+    """Какие Chroma-коллекции искать и подписи разделов для контекста."""
+    db = deps.get_db()
+    rscope = thread_row.get("rag")
+    if rscope is None and thread_row.get("rag_scope_json") is not None:
+        rscope = parse_rag_scope_json(str(thread_row.get("rag_scope_json") or ""))
+    all_meta = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
+    all_cids = [str(r["id"]) for r in all_meta]
+    names = {str(r["id"]): str(r["name"]) for r in all_meta}
+    tids = collection_ids_for_retrieval(
+        all_cids,
+        collection_id=str(thread_row["collection_id"]),
+        rag_scope=rscope,
+    )
+    labels = {k: names.get(k, k[:8] + "…") for k in tids}
+    return tids, labels
 
 
 @public.get("/health")
@@ -104,12 +155,14 @@ def create_collection(
 @router.get("/collections", response_model=list[CollectionOut])
 def list_collections() -> list[CollectionOut]:
     db = deps.get_db()
-    rows = db.list_collections()
+    rows = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
     return [CollectionOut(id=r["id"], name=r["name"], created_at=r["created_at"]) for r in rows]
 
 
 @router.delete("/collections/{collection_id}", dependencies=[Depends(require_admin)])
 def delete_collection(collection_id: str, settings: Settings = Depends(get_settings)) -> dict[str, str]:
+    if collection_id == RAG_ALL_PLACEHOLDER_ID:
+        raise HTTPException(status_code=400, detail="Reserved system collection")
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -237,11 +290,14 @@ def chat(
         db = deps.get_db()
         if not db.get_collection(collection_id):
             raise HTTPException(status_code=404, detail="Collection not found")
+        row = db.get_collection(collection_id)
+        assert row
         out = run_chat(
             settings,
             deps.get_chroma(),
-            collection_id,
             body.message,
+            collection_ids=[collection_id],
+            collection_labels={collection_id: str(row["name"])},
             debug=client_debug,
         )
         if client_debug:
@@ -308,13 +364,15 @@ def chat_export(
     try:
         _check_polza_allowlist(settings)
         db = deps.get_db()
-        if not db.get_collection(collection_id):
+        row = db.get_collection(collection_id)
+        if not row:
             raise HTTPException(status_code=404, detail="Collection not found")
         out = run_chat(
             settings,
             deps.get_chroma(),
-            collection_id,
             body.message,
+            collection_ids=[collection_id],
+            collection_labels={collection_id: str(row["name"])},
         )
         db.audit(
             "chat.export",
@@ -350,37 +408,77 @@ def _get_thread_or_404(thread_id: str) -> dict[str, str]:
 def list_chat_threads(
     collection_id: str | None = Query(
         default=None,
-        description="Фильтр по разделу (RAG collection id)",
+        description="Legacy: только треды с одним разделом (без rag multi/all)",
+    ),
+    rag: str | None = Query(
+        default=None,
+        description='JSON области RAG, например {"all":true} или {"ids":["uuid1","uuid2"]}',
     ),
 ) -> list[ChatThreadOut]:
     db = deps.get_db()
-    rows = db.list_chat_threads(collection_id=collection_id)
-    return [
-        ChatThreadOut(
-            id=r["id"],
-            collection_id=r["collection_id"],
-            title=r["title"],
-            created_at=r["created_at"],
-            updated_at=r["updated_at"],
+    if rag is not None and rag.strip():
+        try:
+            user_scope = json.loads(rag)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail="Invalid rag JSON") from e
+        if not isinstance(user_scope, dict):
+            raise HTTPException(status_code=400, detail="rag must be a JSON object")
+        rows = db.list_chat_threads(collection_id=None, limit=1000, legacy_single_only=False)
+        matched = [
+            r
+            for r in rows
+            if thread_matches_rag(
+                str(r["collection_id"]),
+                r.get("rag"),
+                user_scope,
+            )
+        ]
+        return [_thread_to_out(r) for r in matched[:500]]
+    if collection_id is not None:
+        rows = db.list_chat_threads(
+            collection_id=collection_id,
+            limit=500,
+            legacy_single_only=True,
         )
-        for r in rows
-    ]
+        return [_thread_to_out(r) for r in rows]
+    rows = db.list_chat_threads(limit=500)
+    return [_thread_to_out(r) for r in rows]
 
 
 @router.post("/chat/threads", response_model=ChatThreadOut)
 def create_chat_thread(body: ChatThreadCreate) -> ChatThreadOut:
     db = deps.get_db()
-    if not db.get_collection(body.collection_id):
-        raise HTTPException(status_code=404, detail="Collection not found")
-    row = db.create_chat_thread(body.collection_id, body.title)
-    db.audit("chat.thread.create", f"id={row['id']} collection={body.collection_id}")
-    return ChatThreadOut(
-        id=row["id"],
-        collection_id=row["collection_id"],
-        title=row["title"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )
+    scope: dict[str, Any] | None = None
+    anchor: str
+    if body.rag is not None:
+        if body.rag.get("all") is True:
+            if not db.get_collection(RAG_ALL_PLACEHOLDER_ID):
+                raise HTTPException(status_code=500, detail="RAG all placeholder missing")
+            anchor = RAG_ALL_PLACEHOLDER_ID
+            scope = {"all": True}
+        elif body.rag.get("ids"):
+            raw_ids = body.rag.get("ids")
+            if not isinstance(raw_ids, list):
+                raise HTTPException(status_code=400, detail="rag.ids must be a list")
+            ids = normalize_id_list([str(x) for x in raw_ids])
+            if not ids:
+                raise HTTPException(status_code=400, detail="rag.ids is empty")
+            for cid in ids:
+                if not db.get_collection(cid):
+                    raise HTTPException(status_code=404, detail=f"Collection not found: {cid}")
+            anchor = ids[0]
+            scope = {"ids": ids}
+        else:
+            raise HTTPException(status_code=400, detail="rag must have all: true or ids: [...]")
+    else:
+        assert body.collection_id is not None
+        if not db.get_collection(body.collection_id):
+            raise HTTPException(status_code=404, detail="Collection not found")
+        anchor = body.collection_id
+        scope = None
+    row = db.create_chat_thread(anchor, body.title, rag_scope=scope)
+    db.audit("chat.thread.create", f"id={row['id']} collection={row['collection_id']} rag={scope}")
+    return _thread_to_out(row)
 
 
 @router.get("/chat/threads/{thread_id}/messages", response_model=list[ChatMessageOut])
@@ -410,13 +508,7 @@ def patch_chat_thread(thread_id: str, body: ChatThreadPatch) -> ChatThreadOut:
     row = db.get_chat_thread(thread_id)
     assert row
     db.audit("chat.thread.rename", f"id={thread_id}")
-    return ChatThreadOut(
-        id=row["id"],
-        collection_id=row["collection_id"],
-        title=row["title"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )
+    return _thread_to_out(row)
 
 
 @router.delete("/chat/threads/{thread_id}")
@@ -436,25 +528,29 @@ def chat_in_thread(
     client_debug: bool = Depends(is_client_debug),
 ) -> ChatOut:
     thread = _get_thread_or_404(thread_id)
-    collection_id = thread["collection_id"]
     if client_debug:
         _log.info(
             "POST /chat/threads/.../messages: thread=%s collection=%s len=%s",
             thread_id,
-            collection_id,
+            thread["collection_id"],
             len(body.message),
         )
     try:
         _check_polza_allowlist(settings)
         db = deps.get_db()
-        if not db.get_collection(collection_id):
-            raise HTTPException(status_code=404, detail="Collection not found")
+        cids, col_labels = _retrieval_ids_and_labels(thread)
+        if not cids:
+            raise HTTPException(
+                status_code=400,
+                detail="No collections to search. Add sections/documents or create a new chat.",
+            )
         db.insert_chat_message(thread_id, "user", body.message, citations=None)
         out = run_chat(
             settings,
             deps.get_chroma(),
-            collection_id,
             body.message,
+            collection_ids=cids,
+            collection_labels=col_labels,
             debug=client_debug,
         )
         cites = list(out.get("citations") or [])
@@ -473,7 +569,7 @@ def chat_in_thread(
         try:
             db.audit(
                 "chat.thread.message",
-                f"thread={thread_id} collection={collection_id} len={len(body.message)} chunks={out.get('chunks_considered')}",
+                f"thread={thread_id} collections={cids!r} len={len(body.message)} chunks={out.get('chunks_considered')}",
             )
         except Exception:
             _log.exception("POST thread message: audit failed; ответ отдаётся")

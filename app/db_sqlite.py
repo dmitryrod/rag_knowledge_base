@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Generator
 from uuid import uuid4
 
+from app.rag_scope import RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -91,6 +93,30 @@ class MetadataDB:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_chat_messages_thread "
                 "ON chat_messages(thread_id, created_at)"
+            )
+            self._ensure_chat_threads_rag_column(conn)
+            conn.commit()
+        self._ensure_rag_all_collection()
+
+    def _ensure_chat_threads_rag_column(self, conn: sqlite3.Connection) -> None:
+        cur = conn.execute("PRAGMA table_info(chat_threads)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "rag_scope_json" not in cols:
+            conn.execute("ALTER TABLE chat_threads ADD COLUMN rag_scope_json TEXT")
+
+    def _ensure_rag_all_collection(self) -> None:
+        """Служебный раздел для тредов «по всем коллекциям» (FK)."""
+        with self._connect() as conn:
+            r = conn.execute(
+                "SELECT 1 FROM collections WHERE id = ?",
+                (RAG_ALL_PLACEHOLDER_ID,),
+            ).fetchone()
+            if r:
+                return
+            ts = utc_now_iso()
+            conn.execute(
+                "INSERT INTO collections (id, name, created_at) VALUES (?, ?, ?)",
+                (RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME, ts),
             )
             conn.commit()
 
@@ -212,45 +238,75 @@ class MetadataDB:
 
     # --- Chat threads / messages (ChatGPT-like persisted history) ---
 
-    def create_chat_thread(self, collection_id: str, title: str | None = None) -> dict[str, str]:
+    def create_chat_thread(
+        self,
+        collection_id: str,
+        title: str | None = None,
+        rag_scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         tid = str(uuid4())
         ts = utc_now_iso()
         default_title = title.strip() if title and title.strip() else "Новый чат"
+        rag_j = json.dumps(rag_scope, ensure_ascii=False) if rag_scope else None
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO chat_threads (id, collection_id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO chat_threads (id, collection_id, title, created_at, updated_at, rag_scope_json)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (tid, collection_id, default_title, ts, ts),
+                (tid, collection_id, default_title, ts, ts, rag_j),
             )
             conn.commit()
         row = self.get_chat_thread(tid)
         assert row is not None
         return row
 
-    def get_chat_thread(self, thread_id: str) -> dict[str, str] | None:
+    def get_chat_thread(self, thread_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, collection_id, title, created_at, updated_at
+                SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
                 FROM chat_threads WHERE id = ?
                 """,
                 (thread_id,),
             ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        raw = d.get("rag_scope_json")
+        if raw:
+            try:
+                d["rag"] = json.loads(str(raw))
+            except json.JSONDecodeError:
+                d["rag"] = None
+        else:
+            d["rag"] = None
+        return d
 
     def list_chat_threads(
         self,
         collection_id: str | None = None,
         limit: int = 500,
-    ) -> list[dict[str, str]]:
+        *,
+        legacy_single_only: bool = False,
+    ) -> list[dict[str, Any]]:
         lim = max(1, min(limit, 1000))
         with self._connect() as conn:
-            if collection_id:
+            if collection_id and legacy_single_only:
                 rows = conn.execute(
                     """
-                    SELECT id, collection_id, title, created_at, updated_at
+                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
+                    FROM chat_threads
+                    WHERE collection_id = ?
+                      AND (rag_scope_json IS NULL OR rag_scope_json = '')
+                    ORDER BY updated_at DESC LIMIT ?
+                    """,
+                    (collection_id, lim),
+                ).fetchall()
+            elif collection_id:
+                rows = conn.execute(
+                    """
+                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
                     FROM chat_threads WHERE collection_id = ?
                     ORDER BY updated_at DESC LIMIT ?
                     """,
@@ -259,13 +315,25 @@ class MetadataDB:
             else:
                 rows = conn.execute(
                     """
-                    SELECT id, collection_id, title, created_at, updated_at
+                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
                     FROM chat_threads
                     ORDER BY updated_at DESC LIMIT ?
                     """,
                     (lim,),
                 ).fetchall()
-        return [dict(r) for r in rows]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            raw = d.get("rag_scope_json")
+            if raw:
+                try:
+                    d["rag"] = json.loads(str(raw))
+                except json.JSONDecodeError:
+                    d["rag"] = None
+            else:
+                d["rag"] = None
+            out.append(d)
+        return out
 
     def update_chat_thread_title(self, thread_id: str, title: str) -> bool:
         t = title.strip()

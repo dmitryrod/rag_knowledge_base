@@ -36,7 +36,12 @@ def test_egress_not_found_json_still_gets_fallback_citations(monkeypatch: pytest
         return '{"answer": "НЕ НАЙДЕНО В БАЗЕ.", "citations": []}'
 
     monkeypatch.setattr(cs.llm_mod, "chat_completion", fake_llm)
-    out = run_chat(_mk_settings(monkeypatch, egress=True), store, "col1", "вопрос")
+    out = run_chat(
+        _mk_settings(monkeypatch, egress=True),
+        store,
+        "вопрос",
+        collection_ids=["col1"],
+    )
     assert out["chunks_considered"] == 1
     assert len(out["citations"]) >= 1
     assert "a__0" in (out["citations"][0].get("chunk_id") or "")
@@ -47,7 +52,12 @@ def test_no_egress_uses_demo_with_citations(monkeypatch: pytest.MonkeyPatch) -> 
     store.query.return_value = [
         {"chunk_id": "b__0", "text": "текст", "metadata": {}},
     ]
-    out = run_chat(_mk_settings(monkeypatch, egress=False, key="k"), store, "c", "q")
+    out = run_chat(
+        _mk_settings(monkeypatch, egress=False, key="k"),
+        store,
+        "q",
+        collection_ids=["c"],
+    )
     assert out.get("demo_mode") is True
     assert len(out["citations"]) >= 1
 
@@ -55,6 +65,11 @@ def test_no_egress_uses_demo_with_citations(monkeypatch: pytest.MonkeyPatch) -> 
 def test_zero_chunks_early_return(monkeypatch: pytest.MonkeyPatch) -> None:
     store = MagicMock()
     store.query.return_value = []
-    out = run_chat(_mk_settings(monkeypatch, egress=True), store, "c", "q")
+    out = run_chat(
+        _mk_settings(monkeypatch, egress=True),
+        store,
+        "q",
+        collection_ids=["c"],
+    )
     assert out["chunks_considered"] == 0
     assert "индексе" in (out.get("answer") or "")
