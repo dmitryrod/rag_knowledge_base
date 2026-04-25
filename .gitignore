@@ -11,7 +11,6 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-# Локальный кэш дистрибутивов (wheels, tar базового Docker-образа); см. scripts/refresh-local-dist.ps1
 local-dist/
 app/.env
 app/data/

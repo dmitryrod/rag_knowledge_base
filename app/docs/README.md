@@ -24,6 +24,8 @@
 | `ROADMAP.md` | V1 / V2 / Enterprise и техдолг. |
 | `CONTRIBUTING.md` | Правила правок и проверок перед merge. |
 | `troubleshooting.md` | Симптом → причина → шаги → проверка. |
+| `CHROMADB.MD` | Практическая справка по ChromaDB для векторного хранилища и retrieval. |
+| `POLZAAI.MD` | Практическая справка по PolzaAI API для LLM, embeddings и media. |
 | `design/` | Референс редизайна (Stitch / Carbon Logic): HTML и `DESIGN.md` — не runtime-код. |
 
 ## Запуск API (MVP)
