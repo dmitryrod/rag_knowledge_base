@@ -7,12 +7,12 @@
 | Компонент | Файлы | Роль |
 |-----------|--------|------|
 | Конфиг | `app/config.py` | `APP_DATA_DIR`, Polza, размеры чанков и retrieval |
-| Метаданные | `app/db_sqlite.py` | Разделы, документы, audit log, **чаты** (`chat_threads`, `chat_messages`, `rag_scope_json`) |
+| Метаданные | `app/db_sqlite.py` | Разделы, документы, audit log, **чаты** (`chat_threads`, `chat_messages`, `rag_scope_json`), **RAG test** (`rag_test_profiles`, `rag_test_runs`, `rag_test_run_pairs`, `rag_runtime_settings`, benchmark / index v2) |
 | Область RAG | `app/rag_scope.py` | «Все» / N разделов → список `collection_id` для retrieval, служебный id `__knowledge_rag_all__` |
 | Векторы | `app/chroma_store.py` | Chroma per-collection; `query_multi` — слияние top‑k по нескольким коллекциям |
 | Ingest | `app/ingest.py` | Извлечение текста (PDF/DOCX/…), chunking |
 | Чат | `app/chat_service.py`, `app/llm.py` | RAG → Polza или demo-режим без ключа |
-| API | `app/routers/api.py`, `app/main.py` | `GET /` — HTML веб-админка (`app/static/index.html`, табы Документы/Чат, настройки, чат с несколькими тредами); `GET /v1/health` публично (`version` **0.4.0**); RAG-чат: `POST /v1/collections/{id}/chat` (без истории в БД) и **потоки** `/v1/chat/threads/...` (история в SQLite); `X-Debug` + `app/debug_dep.py` |
+| API | `app/routers/api.py`, `app/routers/rag_test.py`, `app/main.py` | `GET /` — HTML веб-админка (`app/static/index.html`, табы Документы/Чат/**Тесты**, настройки, чат с несколькими тредами); `GET /v1/health` публично (`version` **0.4.0**); RAG-чат: `POST /v1/collections/{id}/chat` и **потоки** `/v1/chat/threads/...` (история в SQLite); **RAG test bench** `/v1/rag-test/*` + `app/rag_test_service.py`; overrides основного чата — `rag_runtime_settings` в SQLite; `X-Debug` + `app/debug_dep.py` |
 | Офлайн-кэш | `local-dist/` (gitignore), `scripts/refresh-local-dist.ps1`, `Dockerfile.wheels` | Кэш pip-wheels и опционально tar базового Docker-образа; альтернативная сборка: `docker-compose.wheels.yml` |
 | RBAC | `app/auth_dep.py` | `admin`: разделы, ingest, audit; `member`: чтение + чат + export + **потоки чата** (`/v1/chat/...`) |
 | Политика LLM | `app/config.py`, проверки в `api.py` / `chat_service.py` | `ALLOW_LLM_EGRESS`, allowlist модели, без egress — retrieval + цитаты без вызова Polza |

@@ -453,6 +453,59 @@
       padding: 3rem 1rem;
       font-size: 0.9rem;
     }
+    #view-tests .tests-toolbar {
+      margin-bottom: 0.75rem;
+    }
+    #view-tests .tests-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      align-items: start;
+    }
+    @media (max-width: 960px) {
+      #view-tests .tests-grid { grid-template-columns: 1fr; }
+    }
+    .test-col {
+      border: 1px solid var(--ghost-border);
+      border-radius: var(--radius-md);
+      padding: 0.65rem 0.75rem;
+      background: var(--surface-container-lowest);
+      min-height: 200px;
+    }
+    .test-col h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    .test-col h4 { margin: 0.5rem 0 0.35rem; font-size: 0.82rem; color: var(--on-surface-variant); font-weight: 600; }
+    .profile-form .pf-row { margin-bottom: 0.45rem; }
+    .profile-form label.pf-lbl { display: block; font-size: 0.75rem; color: var(--on-surface-variant); margin-bottom: 0.15rem; cursor: help; }
+    .profile-form input[type="text"], .profile-form input[type="number"], .profile-form select, .profile-form textarea {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      background: var(--surface);
+      color: var(--on-surface);
+      border: 1px solid var(--ghost-border);
+      border-radius: 6px;
+      padding: 0.3rem 0.45rem;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    .profile-form textarea { min-height: 4rem; font-family: inherit; }
+    .profile-form textarea.pf-mono { font-family: ui-monospace, monospace; min-height: 3rem; font-size: 0.72rem; }
+    .profile-form .pf-adv { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--ghost-border); }
+    .profile-form details summary { cursor: pointer; font-size: 0.8rem; color: var(--on-surface-variant); }
+    .ts-modes { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; }
+    .ts-sec { margin: 0.2rem 0; }
+    .ts-docs-sub { margin: 0.25rem 0 0.35rem 1.15rem; font-size: 0.78rem; }
+    .ts-doc-row { display: block; margin: 0.1rem 0; }
+    .test-out {
+      font-size: 0.8rem;
+      max-height: 240px;
+      overflow: auto;
+      white-space: pre-wrap;
+      margin-top: 0.5rem;
+      padding: 0.4rem;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+    }
   </style>
 </head>
 <body>
@@ -470,6 +523,9 @@
         <div class="sidebar-panel hidden" id="sidebar-settings-panel">
           <p class="sidebar-hint">Настройки открыты справа. Иконка шестерёнки вверху.</p>
         </div>
+        <div class="sidebar-panel hidden" id="sidebar-tests-panel">
+          <p class="sidebar-hint">A/B RAG: общий вопрос сверху, профили A/B в колонках. Используется текущий выбор разделов из «Чат».</p>
+        </div>
       </div>
     </aside>
 
@@ -478,6 +534,7 @@
         <div class="tabs" role="tablist">
           <button type="button" class="tab" data-view="docs" id="tabDocs" role="tab">Документы</button>
           <button type="button" class="tab active" data-view="chat" id="tabChat" role="tab">Чат</button>
+          <button type="button" class="tab" data-view="tests" id="tabTests" role="tab">Тесты</button>
         </div>
         <div class="topbar-settings">
           <button type="button" class="btn-gear" id="btnSettings" title="Настройки" aria-label="Настройки">⚙</button>
@@ -573,6 +630,214 @@
                 <span class="status" style="margin:0">Заголовок <span class="mono">X-Debug: 1</span> — подробные логи и trace при ошибке чата (<span class="mono">APP_ALLOW_CLIENT_DEBUG</span>).</span>
               </label>
             </div>
+            <div class="card">
+              <h2>Тесты качества RAG</h2>
+              <p class="status" style="margin:0 0 0.5rem">Сравнение двух runtime-профилей: retrieval, temperature, system prompt, LLM on/off.</p>
+              <button type="button" class="btn" id="btnOpenTests">Открыть тесты</button>
+            </div>
+            <div class="card" id="mainChatOverrideCard">
+              <h2>Основной чат: overrides</h2>
+              <p class="status mono" id="mainChatProfileOut" style="margin:0.35rem 0;white-space:pre-wrap;max-height:6rem;overflow:auto">—</p>
+              <p class="status" style="margin:0.35rem 0;font-size:0.8rem">Применяются только safe runtime-поля (см. API <span class="mono">/v1/rag-test/apply-to-chat</span>).</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-tests" class="view">
+          <div class="view-inner">
+            <div class="card tests-toolbar">
+              <h2>Общий вопрос</h2>
+              <textarea id="testCommonQ" rows="2" style="width:100%" placeholder="Вопрос для A/B…"></textarea>
+              <div class="row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.35rem">
+                <button type="button" class="btn" id="btnRunA">Запустить A</button>
+                <button type="button" class="btn" id="btnRunB">Запустить B</button>
+                <button type="button" class="btn secondary" id="btnRunAB">A/B (сравнить)</button>
+                <span class="status" id="testBenchMsg" style="margin:0"></span>
+              </div>
+            </div>
+            <div class="card" id="testSourcesCard" style="margin-top:0.75rem">
+              <h2>Источники для теста</h2>
+              <p class="status" style="font-size:0.8rem;margin:0.35rem 0">Общий <span class="mono">scope</span> для A и B (отдельно от вкладки «Чат»). Укажите разделы и при необходимости конкретные документы.</p>
+              <div id="testScopeMount"></div>
+            </div>
+            <div class="tests-grid">
+              <div class="test-col" data-side="A">
+                <h3 id="profile-form-a-heading">Профиль A</h3>
+                <form class="profile-form" id="profileFormA" autocomplete="off" onsubmit="return false">
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_retrieval_top_k" title="Сколько top chunks брать из Chroma. Больше — выше recall, но больше шума, задержка и токены. Обычно 4–12.">retrieval_top_k (1–30)</label>
+                    <input type="number" id="profileA_retrieval_top_k" name="retrieval_top_k" min="1" max="30" step="1" value="8" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_distance_threshold" title="Отбрасывает chunks, у которых distance больше порога. Пусто = фильтр выключен. Подбирается по эмбеддингам (пример: 1.2).">distance_threshold</label>
+                    <input type="text" id="profileA_distance_threshold" name="distance_threshold" inputmode="decimal" placeholder="пусто = выкл" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" title="Если выключено — только retrieval / ответ без LLM. Если включено, вызов LLM всё рав possible только при ALLOW_LLM_EGRESS=true."><input type="checkbox" id="profileA_llm_enabled" name="llm_enabled" checked /> llm_enabled</label>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_llm_model" title="Пусто = модель по умолчанию (напр. POLZA_CHAT_MODEL). Пример: openai/gpt-4o-mini.">llm_model</label>
+                    <input type="text" id="profileA_llm_model" name="llm_model" placeholder="по умолчанию с сервера" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_temperature" title="Для RAG обычно 0 — меньше галлюцинаций.">temperature (0–2)</label>
+                    <input type="number" id="profileA_temperature" name="temperature" min="0" max="2" step="0.1" value="0" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_top_p" title="Nucleus sampling. При temperature=0 обычно не трогают. Пусто = не передавать.">top_p (0–1)</label>
+                    <input type="text" id="profileA_top_p" name="top_p" placeholder="пусто" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_max_tokens" title="Лимит длины ответа (токенов), если API поддерживает.">max_tokens</label>
+                    <input type="text" id="profileA_max_tokens" name="max_tokens" placeholder="пусто" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_seed" title="Best-effort воспроизводимость; идентичный ответ не гарантируется.">seed</label>
+                    <input type="text" id="profileA_seed" name="seed" inputmode="numeric" placeholder="пусто" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_system_prompt" title="Пусто = серверный citation-first system prompt.">system_prompt</label>
+                    <textarea id="profileA_system_prompt" name="system_prompt" rows="2" placeholder="пусто = по умолчанию"></textarea>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" title="В инструкции требовать цитаты из контекста."><input type="checkbox" id="profileA_citations_required" name="citations_required" checked /> citations_required</label>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_fallback_mode" title="Поведение, если у LLM пустые citations.">fallback_mode</label>
+                    <select id="profileA_fallback_mode" name="fallback_mode">
+                      <option value="top_chunks">top_chunks</option>
+                      <option value="none">none</option>
+                      <option value="not_found">not_found</option>
+                    </select>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_json_mode" title="Режим structured output; json_schema_strict в MVP — по смыслу «строгий JSON от модели».">json_mode</label>
+                    <select id="profileA_json_mode" name="json_mode">
+                      <option value="none">none</option>
+                      <option value="json_object">json_object</option>
+                      <option value="json_schema_strict">json_schema_strict</option>
+                    </select>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileA_timeout_seconds" title="Таймаут HTTP к LLM/оркестрации, сек.">timeout_seconds (5–600)</label>
+                    <input type="number" id="profileA_timeout_seconds" name="timeout_seconds" min="5" max="600" step="1" value="120" />
+                  </div>
+                  <div class="pf-adv">
+                    <details>
+                      <summary>Advanced: JSON-поля</summary>
+                      <div class="pf-row" style="margin-top:0.5rem">
+                        <label class="pf-lbl" for="profileA_max_completion_tokens" title="Альтернативный/доп. лимит completion (зависит от API).">max_completion_tokens</label>
+                        <input type="text" id="profileA_max_completion_tokens" name="max_completion_tokens" placeholder="пусто" />
+                      </div>
+                      <div class="pf-row">
+                        <label class="pf-lbl" for="profileA_where_document" title="Chroma where_document, JSON-объект. Пример: { &quot;$contains&quot;: &quot;термин&quot; }">where_document (JSON)</label>
+                        <textarea class="pf-mono" id="profileA_where_document" name="where_document" rows="2" placeholder="пусто"></textarea>
+                      </div>
+                      <div class="pf-row">
+                        <label class="pf-lbl" for="profileA_provider" title="Объект маршрутизации провайдера Polza. Пример: { &quot;sort&quot;: &quot;latency&quot;, &quot;allow_fallbacks&quot;: true }">provider (JSON)</label>
+                        <textarea class="pf-mono" id="profileA_provider" name="provider" rows="2" placeholder="пусто"></textarea>
+                      </div>
+                    </details>
+                  </div>
+                </form>
+                <div class="row" style="margin-top:0.35rem;gap:0.35rem;flex-wrap:wrap">
+                  <button type="button" class="btn secondary" id="btnSaveProfileA" title="Сохранить в localStorage">Сохранить</button>
+                  <button type="button" class="btn secondary" id="btnExportA">Экспорт JSON</button>
+                  <label class="status" style="cursor:pointer">Импорт JSON <input type="file" id="importA" accept="application/json" style="display:none" /></label>
+                </div>
+                <div class="test-out" id="testOutA" aria-live="polite">—</div>
+              </div>
+              <div class="test-col" data-side="B">
+                <h3 id="profile-form-b-heading">Профиль B</h3>
+                <form class="profile-form" id="profileFormB" autocomplete="off" onsubmit="return false">
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_retrieval_top_k" title="Сколько top chunks брать из Chroma. Больше — выше recall, но больше шума, задержка и токены. Обычно 4–12.">retrieval_top_k (1–30)</label>
+                    <input type="number" id="profileB_retrieval_top_k" name="retrieval_top_k" min="1" max="30" step="1" value="8" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_distance_threshold" title="Отбрасывает chunks, у которых distance больше порога. Пусто = фильтр выключен. Подбирается по эмбеддингам (пример: 1.2).">distance_threshold</label>
+                    <input type="text" id="profileB_distance_threshold" name="distance_threshold" inputmode="decimal" placeholder="пусто = выкл" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" title="Если выключено — только retrieval / ответ без LLM. Если включено, вызов LLM всё рав possible только при ALLOW_LLM_EGRESS=true."><input type="checkbox" id="profileB_llm_enabled" name="llm_enabled" checked /> llm_enabled</label>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_llm_model" title="Пусто = модель по умолчанию (напр. POLZA_CHAT_MODEL). Пример: openai/gpt-4o-mini.">llm_model</label>
+                    <input type="text" id="profileB_llm_model" name="llm_model" placeholder="по умолчанию с сервера" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_temperature" title="Для RAG обычно 0 — меньше галлюцинаций.">temperature (0–2)</label>
+                    <input type="number" id="profileB_temperature" name="temperature" min="0" max="2" step="0.1" value="0" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_top_p" title="Nucleus sampling. При temperature=0 обычно не трогают. Пусто = не передавать.">top_p (0–1)</label>
+                    <input type="text" id="profileB_top_p" name="top_p" placeholder="пусто" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_max_tokens" title="Лимит длины ответа (токенов), если API поддерживает.">max_tokens</label>
+                    <input type="text" id="profileB_max_tokens" name="max_tokens" placeholder="пусто" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_seed" title="Best-effort воспроизводимость; идентичный ответ не гарантируется.">seed</label>
+                    <input type="text" id="profileB_seed" name="seed" inputmode="numeric" placeholder="пусто" />
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_system_prompt" title="Пусто = серверный citation-first system prompt.">system_prompt</label>
+                    <textarea id="profileB_system_prompt" name="system_prompt" rows="2" placeholder="пусто = по умолчанию"></textarea>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" title="В инструкции требовать цитаты из контекста."><input type="checkbox" id="profileB_citations_required" name="citations_required" checked /> citations_required</label>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_fallback_mode" title="Поведение, если у LLM пустые citations.">fallback_mode</label>
+                    <select id="profileB_fallback_mode" name="fallback_mode">
+                      <option value="top_chunks">top_chunks</option>
+                      <option value="none">none</option>
+                      <option value="not_found">not_found</option>
+                    </select>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_json_mode" title="Режим structured output; json_schema_strict в MVP — по смыслу «строгий JSON от модели».">json_mode</label>
+                    <select id="profileB_json_mode" name="json_mode">
+                      <option value="none">none</option>
+                      <option value="json_object">json_object</option>
+                      <option value="json_schema_strict">json_schema_strict</option>
+                    </select>
+                  </div>
+                  <div class="pf-row">
+                    <label class="pf-lbl" for="profileB_timeout_seconds" title="Таймаут HTTP к LLM/оркестрации, сек.">timeout_seconds (5–600)</label>
+                    <input type="number" id="profileB_timeout_seconds" name="timeout_seconds" min="5" max="600" step="1" value="120" />
+                  </div>
+                  <div class="pf-adv">
+                    <details>
+                      <summary>Advanced: JSON-поля</summary>
+                      <div class="pf-row" style="margin-top:0.5rem">
+                        <label class="pf-lbl" for="profileB_max_completion_tokens" title="Альтернативный/доп. лимит completion (зависит от API).">max_completion_tokens</label>
+                        <input type="text" id="profileB_max_completion_tokens" name="max_completion_tokens" placeholder="пусто" />
+                      </div>
+                      <div class="pf-row">
+                        <label class="pf-lbl" for="profileB_where_document" title="Chroma where_document, JSON-объект. Пример: { &quot;$contains&quot;: &quot;термин&quot; }">where_document (JSON)</label>
+                        <textarea class="pf-mono" id="profileB_where_document" name="where_document" rows="2" placeholder="пусто"></textarea>
+                      </div>
+                      <div class="pf-row">
+                        <label class="pf-lbl" for="profileB_provider" title="Объект маршрутизации провайдера Polza. Пример: { &quot;sort&quot;: &quot;latency&quot;, &quot;allow_fallbacks&quot;: true }">provider (JSON)</label>
+                        <textarea class="pf-mono" id="profileB_provider" name="provider" rows="2" placeholder="пусто"></textarea>
+                      </div>
+                    </details>
+                  </div>
+                </form>
+                <div class="row" style="margin-top:0.35rem;gap:0.35rem;flex-wrap:wrap">
+                  <button type="button" class="btn secondary" id="btnSaveProfileB" title="Сохранить в localStorage">Сохранить</button>
+                  <button type="button" class="btn secondary" id="btnExportB">Экспорт JSON</button>
+                  <label class="status" style="cursor:pointer">Импорт JSON <input type="file" id="importB" accept="application/json" style="display:none" /></label>
+                </div>
+                <div class="test-out" id="testOutB" aria-live="polite">—</div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:0.75rem">
+              <h3>Результат A/B (после «A/B»)</h3>
+              <pre class="test-out" id="testCompareOut" style="max-height:320px">—</pre>
+            </div>
           </div>
         </div>
       </main>
@@ -652,6 +917,7 @@
       $("sidebar-chat-panel").classList.toggle("hidden", name !== "chat");
       $("sidebar-docs-panel").classList.toggle("hidden", name !== "docs");
       $("sidebar-settings-panel").classList.toggle("hidden", name !== "settings");
+      if ($("sidebar-tests-panel")) $("sidebar-tests-panel").classList.toggle("hidden", name !== "tests");
     }
 
     function setView(name) {
@@ -669,6 +935,491 @@
       btn.onclick = () => setView(btn.getAttribute("data-view"));
     });
     $("btnSettings").onclick = () => setView("settings");
+    if ($("btnOpenTests")) $("btnOpenTests").onclick = () => setView("tests");
+
+    const testProfileStoreA = "knowledge_test_profile_a";
+    const testProfileStoreB = "knowledge_test_profile_b";
+    const testScopeStore = "knowledge_test_scope";
+    let testScope = { kind: "all", sectionIds: [], docs: {} };
+
+    function defaultTestProfile() {
+      return {
+        retrieval_top_k: 8,
+        distance_threshold: null,
+        llm_enabled: true,
+        llm_model: null,
+        temperature: 0,
+        top_p: null,
+        max_tokens: null,
+        max_completion_tokens: null,
+        seed: null,
+        system_prompt: null,
+        citations_required: true,
+        fallback_mode: "top_chunks",
+        json_mode: "none",
+        where_document: null,
+        timeout_seconds: 120,
+        provider: null
+      };
+    }
+    function pid(side, name) { return "profile" + side + "_" + name; }
+    function applyProfileToForm(side, raw) {
+      const s = side;
+      const d = Object.assign(defaultTestProfile(), raw || {});
+      const setN = (n, v) => { const el = $(pid(s, n)); if (el) el.value = v == null || v === "" ? "" : String(v); };
+      setN("retrieval_top_k", d.retrieval_top_k);
+      setN("distance_threshold", d.distance_threshold);
+      if ($(pid(s, "llm_enabled"))) $(pid(s, "llm_enabled")).checked = !!d.llm_enabled;
+      setN("llm_model", d.llm_model);
+      setN("temperature", d.temperature);
+      setN("top_p", d.top_p);
+      setN("max_tokens", d.max_tokens);
+      setN("max_completion_tokens", d.max_completion_tokens);
+      setN("seed", d.seed);
+      if ($(pid(s, "system_prompt"))) $(pid(s, "system_prompt")).value = d.system_prompt == null ? "" : String(d.system_prompt);
+      if ($(pid(s, "citations_required"))) $(pid(s, "citations_required")).checked = d.citations_required;
+      if ($(pid(s, "fallback_mode"))) $(pid(s, "fallback_mode")).value = d.fallback_mode || "top_chunks";
+      if ($(pid(s, "json_mode"))) $(pid(s, "json_mode")).value = d.json_mode || "none";
+      setN("timeout_seconds", d.timeout_seconds);
+      if ($(pid(s, "where_document"))) {
+        $(pid(s, "where_document")).value =
+          d.where_document == null ? "" : JSON.stringify(d.where_document, null, 2);
+      }
+      if ($(pid(s, "provider"))) {
+        $(pid(s, "provider")).value = d.provider == null ? "" : JSON.stringify(d.provider, null, 2);
+      }
+    }
+    function getProfileFromForm(side) {
+      const s = side;
+      const t = (n) => ($((pid(s, n))) && $(pid(s, n)).value) || "";
+      const ckb = (n) => $(pid(s, n)) && $(pid(s, n)).checked;
+      const pInt = (n, d, lo, hi) => {
+        const v = t(n).trim();
+        if (v === "") return d;
+        const x = parseInt(v, 10);
+        if (!Number.isFinite(x)) return d;
+        return Math.min(hi, Math.max(lo, x));
+      };
+      const pFloat = (n, d, lo, hi) => {
+        const v = t(n).trim();
+        if (v === "") return d;
+        const x = parseFloat(v);
+        if (!Number.isFinite(x)) return d;
+        return Math.min(hi, Math.max(lo, x));
+      };
+      const pOptInt = (n) => {
+        const v = t(n).trim();
+        if (v === "") return null;
+        const x = parseInt(v, 10);
+        return Number.isFinite(x) ? x : null;
+      };
+      const pOptFloat = (n) => {
+        const v = t(n).trim();
+        if (v === "") return null;
+        const x = parseFloat(v);
+        return Number.isFinite(x) ? x : null;
+      };
+      const w = t("where_document").trim();
+      let where_document = null;
+      if (w) {
+        try { where_document = JSON.parse(w); } catch (e) { throw new Error("where_document: " + e); }
+      }
+      const pr = t("provider").trim();
+      let provider = null;
+      if (pr) {
+        try { provider = JSON.parse(pr); } catch (e) { throw new Error("provider: " + e); }
+      }
+      const dthr = t("distance_threshold").trim();
+      const dthrN = dthr === "" ? null : parseFloat(dthr);
+      const tpp = t("top_p").trim();
+      const tppN = tpp === "" ? null : parseFloat(tpp);
+      return {
+        retrieval_top_k: pInt("retrieval_top_k", 8, 1, 30),
+        distance_threshold: dthrN != null && Number.isFinite(dthrN) ? dthrN : null,
+        llm_enabled: ckb("llm_enabled"),
+        llm_model: t("llm_model").trim() || null,
+        temperature: pFloat("temperature", 0, 0, 2),
+        top_p: tppN != null && Number.isFinite(tppN) && tppN >= 0 && tppN <= 1 ? tppN : null,
+        max_tokens: pOptInt("max_tokens"),
+        max_completion_tokens: pOptInt("max_completion_tokens"),
+        seed: pOptInt("seed"),
+        system_prompt: t("system_prompt").trim() || null,
+        citations_required: ckb("citations_required"),
+        fallback_mode: (t("fallback_mode") || "top_chunks"),
+        json_mode: (t("json_mode") || "none"),
+        where_document,
+        timeout_seconds: pFloat("timeout_seconds", 120, 5, 600),
+        provider
+      };
+    }
+    function parseProfile(text) {
+      const j = JSON.parse(text);
+      return j.profile !== undefined ? j.profile : j;
+    }
+    function loadTestProfiles() {
+      const loadOne = (side) => {
+        const key = side === "A" ? testProfileStoreA : testProfileStoreB;
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) { applyProfileToForm(side, parseProfile(raw)); return; }
+        } catch (e) { /* fallthrough */ }
+        applyProfileToForm(side, defaultTestProfile());
+      };
+      loadOne("A");
+      loadOne("B");
+    }
+    function saveTestScope() {
+      try { localStorage.setItem(testScopeStore, JSON.stringify(testScope)); } catch (e) { /* */ }
+    }
+    function pruneTestScopeToExisting() {
+      if (!collections.length) {
+        testScope = { kind: "all", sectionIds: [], docs: {} };
+        return;
+      }
+      const valid = new Set(collections.map((c) => c.id));
+      testScope.sectionIds = (testScope.sectionIds || []).filter((id) => valid.has(id));
+      const next = {};
+      for (const id of testScope.sectionIds) {
+        if (testScope.docs && testScope.docs[id]) next[id] = testScope.docs[id];
+      }
+      testScope.docs = next;
+    }
+    function getTestScopeObject() {
+      pruneTestScopeToExisting();
+      if (!collections.length) return { all: false };
+      if (testScope.kind === "all") return { all: true };
+      const ids = (testScope.sectionIds || [])
+        .filter((id) => collections.some((c) => c.id === id))
+        .sort();
+      if (testScope.kind === "sections") {
+        if (!ids.length) return { all: false };
+        return { ids };
+      }
+      if (testScope.kind === "docs") {
+        if (!ids.length) return { all: false };
+        const dmap = {};
+        for (const cid of ids) {
+          const st = testScope.docs[cid];
+          if (!st || st.all) continue;
+          if (st.loading) continue;
+          if ((st.ids || []).length) dmap[cid] = [...st.ids].sort();
+        }
+        if (Object.keys(dmap).length) return { ids, document_ids_by_collection: dmap };
+        return { ids };
+      }
+      return { all: true };
+    }
+    function canUseTestRag() {
+      if (!collections.length) return false;
+      if (testScope.kind === "all") return true;
+      const ids = (testScope.sectionIds || []).filter((id) => collections.some((c) => c.id === id));
+      if (testScope.kind === "sections") return ids.length > 0;
+      if (testScope.kind === "docs") {
+        if (!ids.length) return false;
+        for (const cid of ids) {
+          const st = testScope.docs[cid];
+          if (!st) return false;
+          if (st.all) continue;
+          if (st.loading) return false;
+          if (st.error) return false;
+          if (!st.list || !st.list.length) return false;
+          if (!(st.ids && st.ids.length)) return false;
+        }
+        return true;
+      }
+      return false;
+    }
+    function loadTestScopeFromStorage() {
+      try {
+        const raw = localStorage.getItem(testScopeStore);
+        if (raw) {
+          const j = JSON.parse(raw);
+          if (j && typeof j.kind === "string") {
+            testScope = {
+              kind: j.kind,
+              sectionIds: Array.isArray(j.sectionIds) ? j.sectionIds.slice() : [],
+              docs: (j.docs && typeof j.docs === "object") ? j.docs : {}
+            };
+            pruneTestScopeToExisting();
+            return;
+          }
+        }
+      } catch (e) { /* */ }
+      testScope = { kind: "all", sectionIds: [], docs: {} };
+    }
+    async function loadDocsForTestScope(cid) {
+      const st = testScope.docs[cid];
+      if (!st) return;
+      st.loading = true;
+      st.error = null;
+      buildTestScopeUi();
+      try {
+        const r = await fetch(
+          apiPath("/v1/collections/" + encodeURIComponent(cid) + "/documents"),
+          { headers: headers(false) }
+        );
+        if (!r.ok) throw new Error(await r.text());
+        st.list = await r.json();
+        st.loading = false;
+        st.ids = (st.list || []).map((d) => d.id);
+        if (!st.ids.length) st.error = "В разделе нет документов";
+      } catch (e) {
+        st.loading = false;
+        st.error = String(e);
+      }
+      buildTestScopeUi();
+    }
+    function buildTestScopeUi() {
+      const mount = $("testScopeMount");
+      if (!mount) return;
+      mount.innerHTML = "";
+      if (!collections.length) {
+        const p = document.createElement("p");
+        p.className = "status";
+        p.textContent = "Нет разделов — создайте раздел в «Документы».";
+        mount.appendChild(p);
+        return;
+      }
+      pruneTestScopeToExisting();
+      const modeRow = document.createElement("div");
+      modeRow.className = "ts-modes";
+      const modeDefs = [
+        { v: "all", t: "Все разделы и документы" },
+        { v: "sections", t: "Только выбранные разделы" },
+        { v: "docs", t: "Выбранные документы (по разделам)" }
+      ];
+      for (const m of modeDefs) {
+        const lab = document.createElement("label");
+        lab.style.cursor = "pointer";
+        const rb = document.createElement("input");
+        rb.type = "radio";
+        rb.name = "tsKind";
+        rb.value = m.v;
+        rb.checked = testScope.kind === m.v;
+        rb.onchange = () => {
+          if (!rb.checked) return;
+          testScope.kind = m.v;
+          if (m.v === "all") { testScope.sectionIds = []; testScope.docs = {}; }
+          saveTestScope();
+          buildTestScopeUi();
+        };
+        lab.appendChild(rb);
+        lab.appendChild(document.createTextNode(" " + m.t));
+        modeRow.appendChild(lab);
+      }
+      mount.appendChild(modeRow);
+      if (testScope.kind === "all") return;
+      const list = document.createElement("div");
+      list.className = "rag-col-list";
+      list.style.marginTop = "0.4rem";
+      for (const c of collections) {
+        const block = document.createElement("div");
+        block.className = "ts-sec";
+        const top = document.createElement("label");
+        top.style.cursor = "pointer";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        const checked = (testScope.sectionIds || []).includes(c.id);
+        cb.checked = checked;
+        top.appendChild(cb);
+        top.appendChild(document.createTextNode(" " + c.name + " (" + c.id.slice(0, 8) + "…)"));
+        cb.onchange = () => {
+          let next = (testScope.sectionIds || []).filter((x) => x !== c.id);
+          if (cb.checked) next.push(c.id);
+          testScope.sectionIds = next;
+          if (testScope.kind === "docs") {
+            if (!cb.checked) { delete testScope.docs[c.id]; } else if (!testScope.docs[c.id]) {
+              testScope.docs[c.id] = { all: true, list: [], ids: [] };
+            }
+          }
+          saveTestScope();
+          buildTestScopeUi();
+        };
+        block.appendChild(top);
+        if (testScope.kind === "docs" && (testScope.sectionIds || []).includes(c.id)) {
+          let st = testScope.docs[c.id];
+          if (!st) { st = { all: true, list: [], ids: [] }; testScope.docs[c.id] = st; }
+          const sub = document.createElement("div");
+          sub.className = "ts-docs-sub";
+          const allRow = document.createElement("div");
+          const allL = document.createElement("label");
+          const allCb = document.createElement("input");
+          allCb.type = "checkbox";
+          allCb.checked = !!st.all;
+          allL.appendChild(allCb);
+          allL.appendChild(document.createTextNode(" Все документы раздела"));
+          allCb.onchange = () => {
+            st.all = allCb.checked;
+            if (st.all) { st.ids = []; st.error = null; } else { st.ids = []; st.list = []; st.error = null; }
+            saveTestScope();
+            buildTestScopeUi();
+            if (!st.all) loadDocsForTestScope(c.id);
+          };
+          allRow.appendChild(allL);
+          sub.appendChild(allRow);
+          if (!st.all) {
+            if (st.loading) {
+              const w = document.createElement("div"); w.className = "status"; w.textContent = "Загрузка документов…"; sub.appendChild(w);
+            } else if (st.error) {
+              const w = document.createElement("div"); w.className = "status err"; w.textContent = st.error; sub.appendChild(w);
+            } else if (st.list && st.list.length) {
+              const have = new Set(st.ids || []);
+              for (const d of st.list) {
+                const dr = document.createElement("label");
+                dr.className = "ts-doc-row";
+                const dcb = document.createElement("input");
+                dcb.type = "checkbox";
+                dcb.dataset.did = d.id;
+                dcb.checked = have.has(d.id);
+                dcb.onchange = () => {
+                  let sids = (st.ids || []).filter((x) => x !== d.id);
+                  if (dcb.checked) sids.push(d.id);
+                  st.ids = sids;
+                  saveTestScope();
+                  buildTestScopeUi();
+                };
+                dr.appendChild(dcb);
+                const fn = d.filename != null ? String(d.filename) : d.id;
+                dr.appendChild(document.createTextNode(" " + fn));
+                sub.appendChild(dr);
+              }
+            } else {
+              const b = document.createElement("button");
+              b.type = "button";
+              b.className = "btn secondary";
+              b.textContent = "Загрузить список документов";
+              b.onclick = () => { loadDocsForTestScope(c.id); };
+              sub.appendChild(b);
+            }
+          }
+          block.appendChild(sub);
+        }
+        list.appendChild(block);
+      }
+      mount.appendChild(list);
+    }
+    async function runTestSide(side) {
+      const q = ($("testCommonQ") && $("testCommonQ").value.trim()) || "";
+      if (!q) { showHead("Введите вопрос.", false); return; }
+      if (!canUseTestRag()) { showHead("В «Источники для теста» укажите валидный scope (разделы / документы) или создайте раздел.", false); return; }
+      const out = side === "A" ? $("testOutA") : $("testOutB");
+      let prof;
+      try { prof = getProfileFromForm(side); } catch (e) { out.textContent = String(e); return; }
+      out.textContent = "…";
+      const scope = getTestScopeObject();
+      try {
+        const r = await fetch(apiPath("/v1/rag-test/run"), {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({ question: q, scope, profile: prof, debug: localStorage.getItem(debugStore) === "1" })
+        });
+        const t = await r.text();
+        if (!r.ok) throw new Error(t);
+        const data = JSON.parse(t);
+        const meta = data.metrics || {};
+        const llm = data.llm_response_meta || {};
+        const usage = (llm && llm.usage) || {};
+        out.textContent = [
+          "answer: " + (data.answer || "").slice(0, 2000) + (String(data.answer || "").length > 2000 ? "…" : ""),
+          "",
+          "citations: " + JSON.stringify(data.citations || [], null, 0),
+          "chunks_considered: " + (data.chunks_considered ?? "—") + "  demo: " + String(!!data.demo_mode),
+          "retrieval_ms: " + (meta.retrieval_ms != null ? meta.retrieval_ms.toFixed(1) : "—") + "  llm_ms: " + (meta.llm_ms != null ? meta.llm_ms.toFixed(1) : "—") + "  total_ms: " + (meta.total_ms != null ? meta.total_ms.toFixed(1) : "—"),
+          "model: " + (llm.model || "—") + "  provider: " + (llm.provider || "—"),
+          "tokens: " + (usage.total_tokens != null ? usage.total_tokens : "—") + "  cost: " + (usage.cost != null ? usage.cost : (usage.cost_rub != null ? usage.cost_rub : "—")),
+          "chunks (count): " + ((data.chunks && data.chunks.length) || 0),
+        ].join("\n");
+        showHead("Тест " + side + " готов", true);
+      } catch (e) {
+        out.textContent = String(e);
+        showHead(String(e), false);
+      }
+    }
+    async function runTestCompare() {
+      const q = ($("testCommonQ") && $("testCommonQ").value.trim()) || "";
+      if (!q) { showHead("Введите вопрос.", false); return; }
+      if (!canUseTestRag()) { showHead("В «Источники для теста» укажите валидный scope (разделы / документы) или создайте раздел.", false); return; }
+      let left, right;
+      try { left = getProfileFromForm("A"); } catch (e) { $("testCompareOut").textContent = "A: " + e; return; }
+      try { right = getProfileFromForm("B"); } catch (e) { $("testCompareOut").textContent = "B: " + e; return; }
+      $("testCompareOut").textContent = "…";
+      const scope = getTestScopeObject();
+      try {
+        const r = await fetch(apiPath("/v1/rag-test/compare"), {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({ question: q, scope, left_profile: left, right_profile: right, debug: localStorage.getItem(debugStore) === "1" })
+        });
+        const t = await r.text();
+        if (!r.ok) throw new Error(t);
+        const data = JSON.parse(t);
+        $("testCompareOut").textContent = JSON.stringify(data, null, 2);
+        if ($("testOutA") && data.left) {
+          const meta = (data.left.metrics) || {};
+          $("testOutA").textContent = "pair_id: " + (data.pair_id || "—") + "\n" + (data.left.answer || "").slice(0, 1500);
+        }
+        if ($("testOutB") && data.right) {
+          $("testOutB").textContent = "pair_id: " + (data.pair_id || "—") + "\n" + (data.right.answer || "").slice(0, 1500);
+        }
+        showHead("A/B готово, пары сохранены на сервере (run ids).", true);
+      } catch (e) {
+        $("testCompareOut").textContent = String(e);
+        showHead(String(e), false);
+      }
+    }
+    if ($("btnRunA")) $("btnRunA").onclick = () => runTestSide("A");
+    if ($("btnRunB")) $("btnRunB").onclick = () => runTestSide("B");
+    if ($("btnRunAB")) $("btnRunAB").onclick = runTestCompare;
+    if ($("btnSaveProfileA")) {
+      $("btnSaveProfileA").onclick = () => {
+        try { localStorage.setItem(testProfileStoreA, JSON.stringify(getProfileFromForm("A"), null, 0)); } catch (e) { showHead(String(e), false); return; }
+        showHead("Профиль A сохранён локально", true);
+      };
+    }
+    if ($("btnSaveProfileB")) {
+      $("btnSaveProfileB").onclick = () => {
+        try { localStorage.setItem(testProfileStoreB, JSON.stringify(getProfileFromForm("B"), null, 0)); } catch (e) { showHead(String(e), false); return; }
+        showHead("Профиль B сохранён локально", true);
+      };
+    }
+    function downloadJson(filename, obj) {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    if ($("btnExportA")) {
+      $("btnExportA").onclick = () => {
+        try { downloadJson("rag-profile-a.json", { profile: getProfileFromForm("A") }); } catch (e) { showHead(String(e), false); }
+      };
+    }
+    if ($("btnExportB")) {
+      $("btnExportB").onclick = () => {
+        try { downloadJson("rag-profile-b.json", { profile: getProfileFromForm("B") }); } catch (e) { showHead(String(e), false); }
+      };
+    }
+    function fileProfileImport(file, side) {
+      const fr = new FileReader();
+      fr.onload = () => {
+        try { applyProfileToForm(side, parseProfile(String(fr.result))); showHead("Импорт OK", true); } catch (e) { showHead(String(e), false); }
+      };
+      fr.readAsText(file);
+    }
+    if ($("importA")) $("importA").onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) fileProfileImport(f, "A"); e.target.value = ""; };
+    if ($("importB")) $("importB").onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) fileProfileImport(f, "B"); e.target.value = ""; };
+    async function loadMainChatProfileUi() {
+      const el = $("mainChatProfileOut");
+      if (!el) return;
+      try {
+        const r = await fetch(apiPath("/v1/rag-test/main-chat-profile"), { headers: headers(false) });
+        if (!r.ok) throw new Error(await r.text());
+        const j = await r.json();
+        el.textContent = j.profile ? JSON.stringify(j.profile, null, 2) : "нет overrides (env defaults)";
+        if (j.updated_at) el.textContent = "updated: " + j.updated_at + "\n" + el.textContent;
+      } catch (e) { el.textContent = String(e); }
+    }
 
     async function loadHealth() {
       try {
@@ -844,6 +1595,8 @@
         }
         loadRagScopeFromStorage();
         buildRagScopeUi();
+        loadTestScopeFromStorage();
+        buildTestScopeUi();
         const saved = localStorage.getItem(cidStore);
         if (saved && collections.some((c) => c.id === saved)) {
           const c = collections.find((x) => x.id === saved);
@@ -857,6 +1610,7 @@
       } catch (e) {
         errBox($("colErr"), String(e));
         buildRagScopeUi();
+        buildTestScopeUi();
       }
     }
     $("btnRefreshCols").onclick = loadCollections;
@@ -1220,6 +1974,8 @@
     setView("chat");
     loadHealth();
     loadCollections();
+    loadTestProfiles();
+    loadMainChatProfileUi();
   </script>
 </body>
 </html>

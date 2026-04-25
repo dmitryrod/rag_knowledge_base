@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Тесты RAG (веб):** форма полей `RagRuntimeProfile` (подсказки в `title`), общий блок **«Источники для теста»** (все разделы / выбранные разделы / выбор документов с `document_ids_by_collection`); импорт/экспорт/сохранение профилей по-прежнему как JSON в `localStorage`. Scope тестов независим от области RAG на вкладке «Чат» (`localStorage`: `knowledge_test_scope`).
+- **Тесты RAG (A/B):** веб-вкладка «Тесты», API префикс `/v1/rag-test/`: `run`, `compare`, CRUD `profiles`, `main-chat-profile`, `apply-to-chat` (только admin); сохранение прогонов в SQLite (`rag_test_runs`, `rag_test_run_pairs`, `rag_runtime_settings` и др.). `Polza` chat completions: `chat_completion_with_result` возвращает `model` / `provider` / `usage` для диагностики. Основной чат читает safe runtime-overrides из `rag_runtime_settings` (retrieval top-k, temperature, system prompt, distance threshold и т.д.).
 - Чат (веб-админка + API): область RAG — **все разделы** (по умолчанию), **один** или **несколько** разделов; retrieval объединяет top‑k по выбранным Chroma-коллекциям. Служебный раздел `__knowledge_rag_all__` в БД для тредов «по всем»; `GET /v1/chat/threads?rag=...` с JSON `{"all":true}` или `{"ids":["..."]}`; `POST /v1/chat/threads` — поле `rag` (альтернатива `collection_id`); у ответа треда — опциональное `rag`.
 
 ### Changed
@@ -12,6 +14,7 @@
 
 ### Fixed
 
+- API: при сбое SSL/тайм-ауте при **эмбеддинге Chroma** (загрузка ONNX с S3) чат и `/v1/rag-test/*` отдают **502** с поясняющим `detail` (`app/chroma_user_errors.py`); см. `troubleshooting.md`.
 - Веб-админка: **CORS** (по умолчанию `APP_CORS_ORIGINS=*`) — устраняет `TypeError: Failed to fetch` при запросах с другого origin; опционально **APP_PUBLIC_BASE_URL** + `apiPath()`; корень `/` отдаёт `index.html` с подстановкой `__API_BASE__` (`HTMLResponse`).
 - Polza/LLM: сетевые сбои до HTTP-ответа (в т.ч. **DNS Errno -3**) маппятся в `LlmUpstreamError` в `app/llm.py`; API чата отдаёт **502** (сеть/DNS) или **504** (таймаут) с читаемым `detail` вместо обобщённого 500.
 - `POLZA_BASE_URL`: валидация — только абсолютный URL с `http://` или `https://`.

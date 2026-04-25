@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.auth_dep import get_auth, is_auth_configured, require_admin
 from app.chat_service import run_chat
+from app.rag_runtime import main_chat_effective_settings
 from app.rag_scope import (
     RAG_ALL_PLACEHOLDER_ID,
     collection_ids_for_retrieval,
@@ -263,6 +264,12 @@ def _rethrow_chat_error(
     if isinstance(e, LlmUpstreamError):
         _log.warning("%s: LLM upstream: %s", log_label, e)
         raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+    from app.chroma_user_errors import http_detail_for_chroma_or_embedding_network_error
+
+    d = http_detail_for_chroma_or_embedding_network_error(e)
+    if d:
+        _log.warning("%s: chroma/embedding: %s", log_label, e)
+        raise HTTPException(status_code=502, detail=d) from e
     _log.exception("%s", log_label)
     if client_debug and settings.allow_client_debug:
         raise HTTPException(
@@ -286,19 +293,22 @@ def chat(
     if client_debug:
         _log.info("POST /chat: collection_id=%s message_len=%s", collection_id, len(body.message))
     try:
-        _check_polza_allowlist(settings)
         db = deps.get_db()
+        eff, sys_prompt, dist_thr = main_chat_effective_settings(settings, db)
+        _check_polza_allowlist(eff)
         if not db.get_collection(collection_id):
             raise HTTPException(status_code=404, detail="Collection not found")
         row = db.get_collection(collection_id)
         assert row
         out = run_chat(
-            settings,
+            eff,
             deps.get_chroma(),
             body.message,
             collection_ids=[collection_id],
             collection_labels={collection_id: str(row["name"])},
             debug=client_debug,
+            system_prompt_override=sys_prompt,
+            distance_threshold=dist_thr,
         )
         if client_debug:
             _log.info(
@@ -362,17 +372,20 @@ def chat_export(
 ) -> PlainTextResponse:
     """Экспорт ответа RAG в текст или markdown с блоком цитат."""
     try:
-        _check_polza_allowlist(settings)
         db = deps.get_db()
+        eff, sys_prompt, dist_thr = main_chat_effective_settings(settings, db)
+        _check_polza_allowlist(eff)
         row = db.get_collection(collection_id)
         if not row:
             raise HTTPException(status_code=404, detail="Collection not found")
         out = run_chat(
-            settings,
+            eff,
             deps.get_chroma(),
             body.message,
             collection_ids=[collection_id],
             collection_labels={collection_id: str(row["name"])},
+            system_prompt_override=sys_prompt,
+            distance_threshold=dist_thr,
         )
         db.audit(
             "chat.export",
@@ -536,8 +549,9 @@ def chat_in_thread(
             len(body.message),
         )
     try:
-        _check_polza_allowlist(settings)
         db = deps.get_db()
+        eff, sys_prompt, dist_thr = main_chat_effective_settings(settings, db)
+        _check_polza_allowlist(eff)
         cids, col_labels = _retrieval_ids_and_labels(thread)
         if not cids:
             raise HTTPException(
@@ -546,12 +560,14 @@ def chat_in_thread(
             )
         db.insert_chat_message(thread_id, "user", body.message, citations=None)
         out = run_chat(
-            settings,
+            eff,
             deps.get_chroma(),
             body.message,
             collection_ids=cids,
             collection_labels=col_labels,
             debug=client_debug,
+            system_prompt_override=sys_prompt,
+            distance_threshold=dist_thr,
         )
         cites = list(out.get("citations") or [])
         db.insert_chat_message(

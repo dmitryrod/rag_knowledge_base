@@ -9,6 +9,8 @@ from typing import Any
 from app.chroma_store import ChromaStore
 from app.config import Settings
 from app import llm as llm_mod
+from app.rag_filters import filter_chunks_by_distance
+from app.rag_runtime import DEFAULT_SYSTEM_PROMPT
 
 _log = logging.getLogger(__name__)
 
@@ -42,6 +44,8 @@ def run_chat(
     collection_ids: list[str],
     collection_labels: dict[str, str] | None = None,
     debug: bool = False,
+    system_prompt_override: str | None = None,
+    distance_threshold: float | None = None,
 ) -> dict[str, Any]:
     cids = [c for c in collection_ids if c]
     if not cids:
@@ -84,6 +88,14 @@ def run_chat(
             "chunks_considered": 0,
         }
 
+    chunks, _dropped = filter_chunks_by_distance(chunks, distance_threshold)
+    if not chunks:
+        return {
+            "answer": "НЕ НАЙДЕНО В БАЗЕ: в индексе нет фрагментов для запроса (после фильтра distance).",
+            "citations": [],
+            "chunks_considered": 0,
+        }
+
     def _fallback_citations(limit: int = 5) -> list[dict[str, str]]:
         out: list[dict[str, str]] = []
         for ch in chunks[:limit]:
@@ -96,13 +108,8 @@ def run_chat(
         return out
 
     context = build_context_block(chunks, collection_labels=collection_labels)
-    system = (
-        "Ты корпоративный ассистент. Отвечай ТОЛЬКО на основе CONTEXT. "
-        "Если фрагменты в CONTEXT относятся к вопросу — ответь по ним и обязательно заполни citations "
-        "(chunk_id из CONTEXT, quote — короткая выдержка). "
-        "Фразу «НЕ НАЙДЕНО В БАЗЕ» используй только если ни один фрагмент CONTEXT не релевантен вопросу; "
-        "в спорных случаях лучше оперись на ближайшие по смыслу фрагменты и укажи citations. "
-        "Верни только валидный JSON без markdown-обёртки: поля answer (markdown), citations (массив {chunk_id, quote})."
+    system = system_prompt_override.strip() if system_prompt_override and system_prompt_override.strip() else (
+        DEFAULT_SYSTEM_PROMPT
     )
     user = f"ВОПРОС:\n{user_message}\n\nCONTEXT:\n{context}"
     messages = [

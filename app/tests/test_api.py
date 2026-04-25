@@ -52,7 +52,14 @@ def test_root_serves_admin_ui(client: TestClient) -> None:
     assert "text/html" in (r.headers.get("content-type") or "")
     assert "Knowledge" in r.text
     assert "Документы" in r.text
+    assert "Тесты" in r.text
     assert "view-chat" in r.text
+    assert "view-tests" in r.text
+    assert 'id="testScopeMount"' in r.text
+    assert 'id="profileFormA"' in r.text
+    assert "Источники для теста" in r.text
+    assert "retrieval_top_k" in r.text
+    assert 'title="Сколько top chunks' in r.text
     assert 'id="chat-thread-list"' in r.text
     assert 'id="message-composer"' in r.text
     assert "window.__API_BASE__" in r.text

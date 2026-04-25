@@ -16,6 +16,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.deps import init_stores
 from app.routers.api import public, router
+from app.routers.rag_test import router as rag_test_router
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
 
     app.include_router(public, prefix="/v1", tags=["health"])
     app.include_router(router, prefix="/v1", tags=["api"])
+    app.include_router(rag_test_router, prefix="/v1", tags=["rag-test"])
 
     app.add_middleware(
         CORSMiddleware,

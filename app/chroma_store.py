@@ -65,13 +65,21 @@ class ChromaStore:
         collection_id: str,
         query_text: str,
         n_results: int,
+        *,
+        where: dict[str, Any] | None = None,
+        where_document: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         col = self._get(collection_id)
-        res = col.query(
-            query_texts=[query_text],
-            n_results=n_results,
-            include=["documents", "metadatas", "distances"],
-        )
+        q_kw: dict[str, Any] = {
+            "query_texts": [query_text],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where is not None:
+            q_kw["where"] = where
+        if where_document is not None:
+            q_kw["where_document"] = where_document
+        res = col.query(**q_kw)
         out: list[dict[str, Any]] = []
         ids_list = res.get("ids") or [[]]
         docs_list = res.get("documents") or [[]]
@@ -93,19 +101,36 @@ class ChromaStore:
         collection_ids: list[str],
         query_text: str,
         n_results: int,
+        *,
+        where_by_collection: dict[str, dict[str, Any]] | None = None,
+        where_document: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Семантический поиск сразу по нескольким Chroma-коллекциям; слияние по distance (меньше — релевантнее)."""
         ids = [c for c in collection_ids if c]
         if not ids:
             return []
         if len(ids) == 1:
-            return self.query(ids[0], query_text, n_results)
+            w0 = (where_by_collection or {}).get(ids[0])
+            return self.query(
+                ids[0],
+                query_text,
+                n_results,
+                where=w0,
+                where_document=where_document,
+            )
         n = max(1, int(n_results))
         per = max(1, (n + len(ids) - 1) // len(ids))
         per = min(max(per, 4), n)
         merged: list[dict[str, Any]] = []
         for cid in ids:
-            part = self.query(cid, query_text, n_results=per)
+            w0 = (where_by_collection or {}).get(cid)
+            part = self.query(
+                cid,
+                query_text,
+                n_results=per,
+                where=w0,
+                where_document=where_document,
+            )
             for ch in part:
                 row = {**ch, "source_collection_id": cid}
                 merged.append(row)
