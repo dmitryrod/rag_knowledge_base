@@ -58,6 +58,14 @@ def test_root_serves_admin_ui(client: TestClient) -> None:
     assert 'id="testScopeMount"' in r.text
     assert 'id="profileFormA"' in r.text
     assert "Источники для теста" in r.text
+    assert "Тесты RAG" in r.text
+    assert 'id="testRunLoader"' in r.text
+    assert 'id="testActionStatus"' in r.text
+    assert "setTestActionStatus" in r.text
+    assert "setTestRunLoading" in r.text
+    assert 'id="btnApplyProfileA"' in r.text
+    assert 'id="btnApplyProfileB"' in r.text
+    assert "applyTestProfileToChat" in r.text
     assert "retrieval_top_k" in r.text
     assert 'title="Сколько top chunks' in r.text
     assert 'id="chat-thread-list"' in r.text

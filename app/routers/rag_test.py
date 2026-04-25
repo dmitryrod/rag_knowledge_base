@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
+import tempfile
+from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -78,6 +82,45 @@ class ApplyToChatIn(BaseModel):
     profile: dict[str, Any] = Field(..., description="MainChatRuntimeSnapshot / RagRuntimeProfile safe subset")
 
 
+_FAVORITE_ID_RE = re.compile(r"^T\d{6}$")
+
+
+class TestFavoriteCreate(BaseModel):
+    """Тело POST: снимок с клиента без id/created_at — сервер дополняет."""
+
+    question: str = Field(default="", max_length=32000)
+    scope_ui: dict[str, Any] = Field(default_factory=dict)
+    scope_api: dict[str, Any] = Field(default_factory=dict)
+    profile_a: dict[str, Any] = Field(default_factory=dict)
+    profile_b: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    run_meta: dict[str, Any] | None = None
+    ui: dict[str, Any] | None = None
+    schema_version: int = 1
+
+
+class TestFavoriteSummary(BaseModel):
+    id: str
+    created_at: str
+    updated_at: str
+    question_preview: str
+
+
+class TestFavoriteOut(BaseModel):
+    id: str
+    created_at: str
+    updated_at: str
+    question: str
+    scope_ui: dict[str, Any]
+    scope_api: dict[str, Any]
+    profile_a: dict[str, Any]
+    profile_b: dict[str, Any]
+    outputs: dict[str, Any]
+    run_meta: dict[str, Any] | None = None
+    ui: dict[str, Any] | None = None
+    schema_version: int = 1
+
+
 # --- helpers ---
 
 
@@ -112,6 +155,68 @@ def _serialize_chunks_for_db(chunks: list[dict[str, Any]], max_text: int = 2000)
             }
         )
     return json.dumps(slim, ensure_ascii=False)
+
+
+def _favorites_dir(settings: Settings) -> Path:
+    d = Path(settings.data_dir) / "tests_favorite"
+    d.mkdir(parents=True, exist_ok=True)
+    return d.resolve()
+
+
+def _parse_favorite_id_from_filename(name: str) -> int | None:
+    m = re.match(r"^(T\d{6})\.json$", name, re.IGNORECASE)
+    if not m:
+        return None
+    raw = m.group(1).upper()
+    if not _FAVORITE_ID_RE.match(raw):
+        return None
+    try:
+        return int(raw[1:], 10)
+    except ValueError:
+        return None
+
+
+def _next_favorite_id(d: Path) -> str:
+    max_n = 0
+    try:
+        for p in d.iterdir():
+            if not p.is_file():
+                continue
+            n = _parse_favorite_id_from_filename(p.name)
+            if n is not None:
+                max_n = max(max_n, n)
+    except OSError:
+        pass
+    return f"T{max_n + 1:06d}"
+
+
+def _favorite_file_path(d: Path, favorite_id: str) -> Path:
+    if not _FAVORITE_ID_RE.match(favorite_id or ""):
+        raise HTTPException(status_code=400, detail="Invalid favorite id")
+    d_res = d.resolve()
+    p = (d_res / f"{favorite_id}.json").resolve()
+    try:
+        p.relative_to(d_res)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
+    return p
+
+
+def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
+    data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
+    fd, tmp_name = tempfile.mkstemp(suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 # --- routes ---
@@ -410,6 +515,138 @@ def main_chat_apply(
     # optional: keep profile name ref — skipped for MVP
     db.audit("rag.profile.apply", "main_chat runtime overrides")
     return {"status": "ok", "message": "Runtime overrides applied to main chat"}
+
+
+@router.get("/rag-test/favorites", response_model=list[TestFavoriteSummary])
+def list_test_favorites(settings: Settings = Depends(get_settings)) -> list[TestFavoriteSummary]:
+    d = _favorites_dir(settings)
+    out: list[TestFavoriteSummary] = []
+    try:
+        paths = list(d.glob("T*.json"))
+        paths.sort(
+            key=lambda p: _parse_favorite_id_from_filename(p.name) or -1,
+            reverse=True,
+        )
+    except OSError:
+        return []
+    for p in paths:
+        n = _parse_favorite_id_from_filename(p.name)
+        if n is None:
+            continue
+        try:
+            raw = p.read_text(encoding="utf-8")
+            j = json.loads(raw)
+        except (OSError, json.JSONDecodeError):
+            _log.warning("skip invalid favorite file: %s", p.name)
+            continue
+        if not isinstance(j, dict):
+            continue
+        fid = str(j.get("id") or p.stem)
+        if not _FAVORITE_ID_RE.match(fid):
+            fid = p.stem
+        q = str(j.get("question") or "")
+        preview = (q[:80] + "…") if len(q) > 80 else q
+        out.append(
+            TestFavoriteSummary(
+                id=fid,
+                created_at=str(j.get("created_at") or ""),
+                updated_at=str(j.get("updated_at") or ""),
+                question_preview=preview,
+            )
+        )
+    out.sort(key=lambda x: int(x.id[1:]) if _FAVORITE_ID_RE.match(x.id) else -1, reverse=True)
+    return out
+
+
+@router.post("/rag-test/favorites", response_model=TestFavoriteOut)
+def create_test_favorite(
+    body: TestFavoriteCreate,
+    settings: Settings = Depends(get_settings),
+) -> TestFavoriteOut:
+    from app.db_sqlite import utc_now_iso
+
+    d = _favorites_dir(settings)
+    fid = _next_favorite_id(d)
+    now = utc_now_iso()
+    doc: dict[str, Any] = {
+        "id": fid,
+        "created_at": now,
+        "updated_at": now,
+        "question": body.question,
+        "scope_ui": body.scope_ui,
+        "scope_api": body.scope_api,
+        "profile_a": body.profile_a,
+        "profile_b": body.profile_b,
+        "outputs": body.outputs,
+        "run_meta": body.run_meta,
+        "ui": body.ui,
+        "schema_version": body.schema_version,
+    }
+    path = _favorite_file_path(d, fid)
+    _atomic_write_json(path, doc)
+    deps.get_db().audit("rag.test.favorite.create", f"id={fid}")
+    return TestFavoriteOut(
+        id=fid,
+        created_at=now,
+        updated_at=now,
+        question=body.question,
+        scope_ui=body.scope_ui,
+        scope_api=body.scope_api,
+        profile_a=body.profile_a,
+        profile_b=body.profile_b,
+        outputs=body.outputs,
+        run_meta=body.run_meta,
+        ui=body.ui,
+        schema_version=body.schema_version,
+    )
+
+
+@router.get("/rag-test/favorites/{favorite_id}", response_model=TestFavoriteOut)
+def get_test_favorite(
+    favorite_id: str,
+    settings: Settings = Depends(get_settings),
+) -> TestFavoriteOut:
+    d = _favorites_dir(settings)
+    path = _favorite_file_path(d, favorite_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    try:
+        j = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=500, detail="Corrupt favorite file") from e
+    if not isinstance(j, dict):
+        raise HTTPException(status_code=500, detail="Invalid favorite file")
+    return TestFavoriteOut(
+        id=str(j.get("id") or favorite_id),
+        created_at=str(j.get("created_at") or ""),
+        updated_at=str(j.get("updated_at") or ""),
+        question=str(j.get("question") or ""),
+        scope_ui=dict(j.get("scope_ui") or {}),
+        scope_api=dict(j.get("scope_api") or {}),
+        profile_a=dict(j.get("profile_a") or {}),
+        profile_b=dict(j.get("profile_b") or {}),
+        outputs=dict(j.get("outputs") or {}),
+        run_meta=j.get("run_meta") if isinstance(j.get("run_meta"), dict) else None,
+        ui=j.get("ui") if isinstance(j.get("ui"), dict) else None,
+        schema_version=int(j.get("schema_version") or 1),
+    )
+
+
+@router.delete("/rag-test/favorites/{favorite_id}")
+def delete_test_favorite(
+    favorite_id: str,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    d = _favorites_dir(settings)
+    path = _favorite_file_path(d, favorite_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    try:
+        path.unlink()
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    deps.get_db().audit("rag.test.favorite.delete", f"id={favorite_id}")
+    return {"status": "deleted", "id": favorite_id}
 
 
 # --- v2: benchmarks ---

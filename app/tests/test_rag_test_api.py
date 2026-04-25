@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -127,3 +128,61 @@ def test_main_chat_profile_get(client: TestClient) -> None:
     assert r.status_code == 200
     j = r.json()
     assert "profile" in j
+
+
+def test_rag_test_favorite_crud_json_files(client: TestClient, tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    fav_dir = data_dir / "tests_favorite"
+    body = {
+        "question": "hello favorite",
+        "scope_ui": {"kind": "all", "sectionIds": [], "docs": {}},
+        "scope_api": {"all": True},
+        "profile_a": {"retrieval_top_k": 3},
+        "profile_b": {"retrieval_top_k": 5},
+        "outputs": {"out_a": "A text", "out_b": "B text", "compare": "{}"},
+        "schema_version": 1,
+    }
+    r = client.post("/v1/rag-test/favorites", json=body)
+    assert r.status_code == 200, r.text
+    created = r.json()
+    assert created["id"] == "T000001"
+    assert created["question"] == "hello favorite"
+    assert (fav_dir / "T000001.json").is_file()
+
+    lst = client.get("/v1/rag-test/favorites")
+    assert lst.status_code == 200
+    rows = lst.json()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "T000001"
+    assert "hello favorite" in rows[0]["question_preview"]
+
+    g = client.get("/v1/rag-test/favorites/T000001")
+    assert g.status_code == 200
+    full = g.json()
+    assert full["outputs"]["out_a"] == "A text"
+
+    d = client.delete("/v1/rag-test/favorites/T000001")
+    assert d.status_code == 200
+    assert d.json()["status"] == "deleted"
+
+    gone = client.get("/v1/rag-test/favorites/T000001")
+    assert gone.status_code == 404
+
+
+def test_rag_test_favorite_rejects_bad_id(client: TestClient) -> None:
+    r = client.get("/v1/rag-test/favorites/bad")
+    assert r.status_code == 400
+    r2 = client.get("/v1/rag-test/favorites/T000999")
+    assert r2.status_code == 404
+    r3 = client.delete("/v1/rag-test/favorites/T00ABCD")
+    assert r3.status_code == 400
+
+
+def test_rag_test_favorite_list_skips_corrupt_file(client: TestClient, tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    fav_dir = data_dir / "tests_favorite"
+    fav_dir.mkdir(parents=True, exist_ok=True)
+    (fav_dir / "T000099.json").write_text("not json {{{", encoding="utf-8")
+    r = client.get("/v1/rag-test/favorites")
+    assert r.status_code == 200
+    assert r.json() == []
