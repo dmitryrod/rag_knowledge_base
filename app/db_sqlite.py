@@ -12,6 +12,9 @@ from uuid import uuid4
 
 from app.rag_scope import RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME
 
+# Патч коллекции: «поле parent_id не менять» (отличается от `None` = корень).
+_COLLECTION_PATCH_PARENT_UNSET = object()
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -96,6 +99,7 @@ class MetadataDB:
             )
             self._ensure_chat_threads_rag_column(conn)
             self._init_rag_test_schema(conn)
+            self._ensure_collections_parent_id(conn)
             conn.commit()
         self._ensure_rag_all_collection()
 
@@ -104,6 +108,17 @@ class MetadataDB:
         cols = [r[1] for r in cur.fetchall()]
         if "rag_scope_json" not in cols:
             conn.execute("ALTER TABLE chat_threads ADD COLUMN rag_scope_json TEXT")
+
+    def _ensure_collections_parent_id(self, conn: sqlite3.Connection) -> None:
+        cur = conn.execute("PRAGMA table_info(collections)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "parent_id" in cols:
+            return
+        conn.execute("ALTER TABLE collections ADD COLUMN parent_id TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_collections_parent_id "
+            "ON collections(parent_id)"
+        )
 
     def _ensure_rag_all_collection(self) -> None:
         """Служебный раздел для тредов «по всем коллекциям» (FK)."""
@@ -115,10 +130,19 @@ class MetadataDB:
             if r:
                 return
             ts = utc_now_iso()
-            conn.execute(
-                "INSERT INTO collections (id, name, created_at) VALUES (?, ?, ?)",
-                (RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME, ts),
-            )
+            has_parent = "parent_id" in [
+                x[1] for x in conn.execute("PRAGMA table_info(collections)").fetchall()
+            ]
+            if has_parent:
+                conn.execute(
+                    "INSERT INTO collections (id, name, created_at, parent_id) VALUES (?, ?, ?, ?)",
+                    (RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME, ts, None),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO collections (id, name, created_at) VALUES (?, ?, ?)",
+                    (RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME, ts),
+                )
             conn.commit()
 
     @contextmanager
@@ -131,31 +155,105 @@ class MetadataDB:
         finally:
             conn.close()
 
-    def create_collection(self, name: str, coll_id: str | None = None) -> str:
+    def create_collection(
+        self,
+        name: str,
+        coll_id: str | None = None,
+        *,
+        parent_id: str | None = None,
+    ) -> str:
         cid = coll_id or str(uuid4())
         ts = utc_now_iso()
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO collections (id, name, created_at) VALUES (?, ?, ?)",
-                (cid, name, ts),
+                "INSERT INTO collections (id, name, created_at, parent_id) VALUES (?, ?, ?, ?)",
+                (cid, name, ts, parent_id),
             )
             conn.commit()
         return cid
 
-    def list_collections(self) -> list[dict[str, str]]:
+    def list_collections(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, name, created_at FROM collections ORDER BY created_at DESC"
+                "SELECT id, name, created_at, parent_id FROM collections ORDER BY created_at DESC"
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_collection(self, coll_id: str) -> dict[str, str] | None:
+    def get_collection(self, coll_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, name, created_at FROM collections WHERE id = ?",
+                "SELECT id, name, created_at, parent_id FROM collections WHERE id = ?",
                 (coll_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def list_child_collection_ids(self, parent_id: str) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id FROM collections WHERE parent_id = ? ORDER BY name ASC",
+                (parent_id,),
+            ).fetchall()
+        return [str(r[0]) for r in rows]
+
+    def collection_subtree_postorder(self, root_id: str) -> list[str]:
+        """Post-order: children first, then root (for safe recursive delete)."""
+
+        def walk(cid: str) -> list[str]:
+            out: list[str] = []
+            for ch in self.list_child_collection_ids(cid):
+                out.extend(walk(ch))
+            out.append(cid)
+            return out
+
+        return walk(root_id)
+
+    def update_collection(
+        self,
+        coll_id: str,
+        *,
+        name: str | None = None,
+        parent_id: Any = _COLLECTION_PATCH_PARENT_UNSET,
+    ) -> bool:
+        """Обновить имя и/или родителя. `parent_id is None` — в корень; unset — не трогать."""
+        with self._connect() as conn:
+            cur_row = conn.execute(
+                "SELECT name, parent_id FROM collections WHERE id = ?",
+                (coll_id,),
+            ).fetchone()
+            if not cur_row:
+                return False
+            new_name = name if name is not None else str(cur_row[0])
+            if parent_id is _COLLECTION_PATCH_PARENT_UNSET:
+                new_parent: str | None = cur_row[1]
+            else:
+                new_parent = parent_id  # type: ignore[assignment]
+            cur = conn.execute(
+                "UPDATE collections SET name = ?, parent_id = ? WHERE id = ?",
+                (new_name, new_parent, coll_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def would_parent_create_cycle(
+        self,
+        node_id: str,
+        new_parent_id: str | None,
+    ) -> bool:
+        """True if new_parent_id is node_id or a descendant of node_id."""
+        if new_parent_id is None:
+            return False
+        if new_parent_id == node_id:
+            return True
+        cur: str | None = new_parent_id
+        while cur is not None:
+            if cur == node_id:
+                return True
+            row = self.get_collection(cur)
+            if not row:
+                return False
+            p = row.get("parent_id")
+            cur = str(p) if p is not None else None
+        return False
 
     def delete_documents_in_collection(self, collection_id: str) -> None:
         with self._connect() as conn:
@@ -219,6 +317,60 @@ class MetadataDB:
             )
             conn.commit()
         return cur.rowcount > 0
+
+    def update_document_filename(
+        self, collection_id: str, doc_id: str, filename: str
+    ) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE documents SET filename = ? WHERE collection_id = ? AND id = ?",
+                (filename, collection_id, doc_id),
+            )
+            conn.commit()
+        return cur.rowcount > 0
+
+    def update_document_collection_id(
+        self, old_collection_id: str, doc_id: str, new_collection_id: str
+    ) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE documents SET collection_id = ? WHERE id = ? AND collection_id = ?",
+                (new_collection_id, doc_id, old_collection_id),
+            )
+            conn.commit()
+        return cur.rowcount > 0
+
+    def count_user_sections(self) -> int:
+        with self._connect() as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM collections WHERE id != ?",
+                (RAG_ALL_PLACEHOLDER_ID,),
+            ).fetchone()
+        return int(n[0]) if n else 0
+
+    def documents_aggregate(self) -> dict[str, int]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM documents"
+            ).fetchone()
+        if not row:
+            return {"count": 0, "size_bytes_sum": 0}
+        return {"count": int(row[0]), "size_bytes_sum": int(row[1])}
+
+    def chat_threads_count(self) -> int:
+        with self._connect() as conn:
+            n = conn.execute("SELECT COUNT(*) FROM chat_threads").fetchone()
+        return int(n[0]) if n else 0
+
+    def chat_messages_count(self) -> int:
+        with self._connect() as conn:
+            n = conn.execute("SELECT COUNT(*) FROM chat_messages").fetchone()
+        return int(n[0]) if n else 0
+
+    def audit_log_rows_count(self) -> int:
+        with self._connect() as conn:
+            n = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()
+        return int(n[0]) if n else 0
 
     def audit(self, action: str, detail: str) -> None:
         ts = utc_now_iso()

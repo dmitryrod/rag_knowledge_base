@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import traceback
+from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
@@ -17,7 +18,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.auth_dep import get_auth, is_auth_configured, require_admin
 from app.chat_service import run_chat
@@ -42,12 +43,73 @@ _log = logging.getLogger(__name__)
 
 class CollectionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=256)
+    parent_id: str | None = Field(
+        default=None,
+        description="Родительский раздел; null или отсутствие — корень",
+    )
+
+
+class CollectionPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=256)
+    parent_id: str | None = None
+
+
+class DocumentPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(..., min_length=1, max_length=512)
+
+
+class DocumentMoveIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_collection_id: str = Field(..., min_length=1, max_length=256)
 
 
 class CollectionOut(BaseModel):
     id: str
     name: str
     created_at: str
+    parent_id: str | None = None
+
+
+class DocumentNode(BaseModel):
+    type: Literal["document"] = "document"
+    id: str
+    name: str
+    collection_id: str
+    size_bytes: int | None = None
+    mime: str | None = None
+    created_at: str
+
+
+class CollectionTreeNode(BaseModel):
+    type: Literal["section"] = "section"
+    id: str
+    name: str
+    parent_id: str | None = None
+    created_at: str
+    children: list["CollectionTreeNode"] = Field(default_factory=list)
+    documents: list[DocumentNode] = Field(default_factory=list)
+
+
+CollectionTreeNode.model_rebuild()
+
+
+class KnowledgeStatsOut(BaseModel):
+    sections_count: int
+    documents_count: int
+    chunks_count: int
+    embedding_vectors_count: int
+    document_files_size_bytes: int
+    metadata_db_size_bytes: int
+    chroma_storage_size_bytes: int
+    data_dir_size_bytes: int
+    chat_threads_count: int
+    chat_messages_count: int
+    audit_log_rows: int
 
 
 class ChatIn(BaseModel):
@@ -110,6 +172,78 @@ def _thread_to_out(row: dict[str, Any]) -> ChatThreadOut:
     )
 
 
+def _safe_file_size(p: Path) -> int:
+    try:
+        return int(p.stat().st_size) if p.is_file() else 0
+    except OSError:
+        return 0
+
+
+def _dir_size_bytes(p: Path) -> int:
+    total = 0
+    if not p.exists():
+        return 0
+    try:
+        for sub in p.rglob("*"):
+            if sub.is_file():
+                try:
+                    total += sub.stat().st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
+def _row_parent_id(r: dict[str, Any]) -> str | None:
+    p = r.get("parent_id")
+    if p is None or p == "":
+        return None
+    return str(p)
+
+
+def _build_knowledge_tree() -> list[CollectionTreeNode]:
+    db = deps.get_db()
+    rows = [
+        r
+        for r in db.list_collections()
+        if str(r["id"]) != RAG_ALL_PLACEHOLDER_ID
+    ]
+    by_id = {str(r["id"]): r for r in rows}
+
+    def make_node(cid: str) -> CollectionTreeNode:
+        row = by_id[cid]
+        child_ids = db.list_child_collection_ids(cid)
+        children = [make_node(c) for c in child_ids]
+        raw_docs = db.list_documents(cid)
+        doc_nodes: list[DocumentNode] = []
+        for d in raw_docs:
+            doc_nodes.append(
+                DocumentNode(
+                    id=str(d["id"]),
+                    name=str(d.get("filename") or d["id"]),
+                    collection_id=cid,
+                    size_bytes=int(d["size_bytes"])
+                    if d.get("size_bytes") is not None
+                    else None,
+                    mime=str(d["mime"]) if d.get("mime") is not None else None,
+                    created_at=str(d["created_at"]),
+                )
+            )
+        return CollectionTreeNode(
+            id=cid,
+            name=str(row["name"]),
+            parent_id=_row_parent_id(row),
+            created_at=str(row["created_at"]),
+            children=children,
+            documents=doc_nodes,
+        )
+
+    roots = [str(r["id"]) for r in rows if _row_parent_id(r) is None]
+    roots.sort(key=lambda i: by_id[i]["name"])
+    return [make_node(r) for r in roots]
+
+
 def _retrieval_ids_and_labels(
     thread_row: dict[str, Any],
 ) -> tuple[list[str], dict[str, str]]:
@@ -146,18 +280,126 @@ def create_collection(
     settings: Settings = Depends(get_settings),
 ) -> CollectionOut:
     db = deps.get_db()
-    cid = db.create_collection(body.name)
-    db.audit("collection.create", f"id={cid} name={body.name}")
+    if body.parent_id:
+        if body.parent_id == RAG_ALL_PLACEHOLDER_ID:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot create section under reserved system collection",
+            )
+        parent = db.get_collection(body.parent_id)
+        if not parent:
+            raise HTTPException(status_code=404, detail="Parent collection not found")
+    cid = db.create_collection(body.name, parent_id=body.parent_id)
+    db.audit(
+        "collection.create",
+        f"id={cid} name={body.name} parent_id={body.parent_id!r}",
+    )
     row = db.get_collection(cid)
     assert row
-    return CollectionOut(id=row["id"], name=row["name"], created_at=row["created_at"])
+    return CollectionOut(
+        id=str(row["id"]),
+        name=str(row["name"]),
+        created_at=str(row["created_at"]),
+        parent_id=_row_parent_id(row),
+    )
 
 
 @router.get("/collections", response_model=list[CollectionOut])
 def list_collections() -> list[CollectionOut]:
     db = deps.get_db()
     rows = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
-    return [CollectionOut(id=r["id"], name=r["name"], created_at=r["created_at"]) for r in rows]
+    return [
+        CollectionOut(
+            id=str(r["id"]),
+            name=str(r["name"]),
+            created_at=str(r["created_at"]),
+            parent_id=_row_parent_id(r),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/collections/tree", response_model=list[CollectionTreeNode])
+def get_collections_tree() -> list[CollectionTreeNode]:
+    return _build_knowledge_tree()
+
+
+@router.get("/knowledge/stats", response_model=KnowledgeStatsOut)
+def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStatsOut:
+    db = deps.get_db()
+    store = deps.get_chroma()
+    user_ids = [
+        str(r["id"])
+        for r in db.list_collections()
+        if str(r["id"]) != RAG_ALL_PLACEHOLDER_ID
+    ]
+    doc_agg = db.documents_aggregate()
+    chunks = store.total_embeddings_for_collection_ids(user_ids)
+    data_dir = Path(settings.data_dir)
+    meta_path = data_dir / "metadata.db"
+    chroma_dir = data_dir / "chroma"
+    return KnowledgeStatsOut(
+        sections_count=db.count_user_sections(),
+        documents_count=doc_agg["count"],
+        chunks_count=chunks,
+        embedding_vectors_count=chunks,
+        document_files_size_bytes=doc_agg["size_bytes_sum"],
+        metadata_db_size_bytes=_safe_file_size(meta_path),
+        chroma_storage_size_bytes=_dir_size_bytes(chroma_dir),
+        data_dir_size_bytes=_dir_size_bytes(data_dir),
+        chat_threads_count=db.chat_threads_count(),
+        chat_messages_count=db.chat_messages_count(),
+        audit_log_rows=db.audit_log_rows_count(),
+    )
+
+
+@router.patch(
+    "/collections/{collection_id}",
+    response_model=CollectionOut,
+    dependencies=[Depends(require_admin)],
+)
+def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut:
+    if collection_id == RAG_ALL_PLACEHOLDER_ID:
+        raise HTTPException(status_code=400, detail="Reserved system collection")
+    db = deps.get_db()
+    row = db.get_collection(collection_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    data = body.model_dump(exclude_unset=True)
+    new_name: str | None = None
+    if "name" in data and data["name"] is not None:
+        new_name = str(data["name"])
+    if "parent_id" in data:
+        np = data["parent_id"]
+        if np == RAG_ALL_PLACEHOLDER_ID:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot move section under reserved system collection",
+            )
+        if np is not None:
+            pr = db.get_collection(str(np))
+            if not pr:
+                raise HTTPException(status_code=404, detail="Parent collection not found")
+            if db.would_parent_create_cycle(collection_id, str(np)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid parent: would create a cycle",
+                )
+        db.update_collection(
+            collection_id,
+            name=new_name,
+            parent_id=np,
+        )
+    elif "name" in data:
+        db.update_collection(collection_id, name=new_name)
+    out = db.get_collection(collection_id)
+    assert out
+    return CollectionOut(
+        id=str(out["id"]),
+        name=str(out["name"]),
+        created_at=str(out["created_at"]),
+        parent_id=_row_parent_id(out),
+    )
 
 
 @router.delete("/collections/{collection_id}", dependencies=[Depends(require_admin)])
@@ -167,9 +409,12 @@ def delete_collection(collection_id: str, settings: Settings = Depends(get_setti
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
-    deps.get_chroma().drop_collection(collection_id)
-    db.delete_collection(collection_id)
-    db.audit("collection.delete", f"id={collection_id}")
+    order = db.collection_subtree_postorder(collection_id)
+    store = deps.get_chroma()
+    for cid in order:
+        store.drop_collection(cid)
+        db.delete_collection(cid)
+    db.audit("collection.delete", f"subtree_root={collection_id} ids={order!r}")
     return {"status": "deleted", "id": collection_id}
 
 
@@ -239,6 +484,100 @@ def delete_document(collection_id: str, document_id: str) -> dict[str, str]:
     db.delete_document_row(collection_id, document_id)
     db.audit("document.delete", f"collection={collection_id} doc={document_id}")
     return {"status": "deleted", "id": document_id}
+
+
+@router.patch(
+    "/collections/{collection_id}/documents/{document_id}",
+    dependencies=[Depends(require_admin)],
+)
+def patch_document(
+    collection_id: str, document_id: str, body: DocumentPatch
+) -> dict[str, Any]:
+    db = deps.get_db()
+    if not db.get_collection(collection_id):
+        raise HTTPException(status_code=404, detail="Collection not found")
+    if not db.get_document(collection_id, document_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    fn = body.filename.strip()
+    if not fn:
+        raise HTTPException(status_code=400, detail="filename is empty")
+    store = deps.get_chroma()
+    store.update_document_filename_metadata(collection_id, document_id, fn)
+    db.update_document_filename(collection_id, document_id, fn)
+    db.audit(
+        "document.patch",
+        f"collection={collection_id} doc={document_id} filename={fn!r}",
+    )
+    row = db.get_document(collection_id, document_id)
+    assert row
+    return dict(row)
+
+
+@router.post(
+    "/collections/{target_collection_id}/documents/{document_id}/move",
+    dependencies=[Depends(require_admin)],
+)
+def move_document(
+    target_collection_id: str, document_id: str, body: DocumentMoveIn
+) -> dict[str, Any]:
+    """Перемещает документ в другой раздел: Chroma-чанки + `documents.collection_id`."""
+    from app.chroma_user_errors import http_detail_for_chroma_or_embedding_network_error
+
+    source = (body.source_collection_id or "").strip()
+    if not source:
+        raise HTTPException(status_code=400, detail="source_collection_id is required")
+    if source == RAG_ALL_PLACEHOLDER_ID or target_collection_id == RAG_ALL_PLACEHOLDER_ID:
+        raise HTTPException(status_code=400, detail="Reserved system collection")
+    db = deps.get_db()
+    if not db.get_collection(source):
+        raise HTTPException(status_code=404, detail="Source collection not found")
+    if not db.get_collection(target_collection_id):
+        raise HTTPException(status_code=404, detail="Target collection not found")
+    if not db.get_document(source, document_id):
+        raise HTTPException(status_code=404, detail="Document not found in source")
+    if source == target_collection_id:
+        row = db.get_document(target_collection_id, document_id)
+        assert row
+        return dict(row)
+    store = deps.get_chroma()
+    n = 0
+    try:
+        n = store.copy_document_vectors_to_collection(
+            source, target_collection_id, document_id
+        )
+    except Exception as e:  # noqa: BLE001 — mapping to 502/500
+        d = http_detail_for_chroma_or_embedding_network_error(e)
+        if d:
+            _log.warning("document.move: chroma copy: %s", e)
+            raise HTTPException(status_code=502, detail=d) from e
+        _log.exception("document.move: chroma copy failed")
+        raise HTTPException(status_code=500, detail="Chroma error") from e
+    if not db.update_document_collection_id(source, document_id, target_collection_id):
+        if n:
+            try:
+                store.delete_by_document(target_collection_id, document_id)
+            except Exception:  # noqa: BLE001
+                _log.exception("document.move: rollback target after failed SQL")
+        raise HTTPException(status_code=500, detail="Failed to update document")
+    if n:
+        try:
+            store.delete_by_document(source, document_id)
+        except Exception as e:  # noqa: BLE001
+            d = http_detail_for_chroma_or_embedding_network_error(e)
+            if d:
+                _log.error("document.move: delete source chunks after success SQL: %s", e)
+                raise HTTPException(status_code=502, detail=d) from e
+            _log.exception("document.move: delete source failed")
+            raise HTTPException(
+                status_code=500, detail="Document moved in DB; vector cleanup failed"
+            ) from e
+    db.audit(
+        "document.move",
+        f"source={source} target={target_collection_id} doc={document_id} chunks={n}",
+    )
+    row = db.get_document(target_collection_id, document_id)
+    assert row
+    return dict(row)
 
 
 def _check_polza_allowlist(settings: Settings) -> None:

@@ -340,3 +340,253 @@ def test_polza_allowlist_blocks_chat(tmp_path, monkeypatch) -> None:
         assert "ALLOWLIST" in chat.json().get("detail", "").upper() or "allowlist" in (
             chat.json().get("detail") or ""
         ).lower()
+
+
+def test_knowledge_tree_nested_and_empty_section(client: TestClient) -> None:
+    r0 = client.post("/v1/collections", json={"name": "tree-root"})
+    assert r0.status_code == 200
+    root_id = r0.json()["id"]
+    assert r0.json().get("parent_id") in (None, "")
+
+    r1 = client.post(
+        "/v1/collections",
+        json={"name": "tree-sub", "parent_id": root_id},
+    )
+    assert r1.status_code == 200
+    sub_id = r1.json()["id"]
+    assert r1.json()["parent_id"] == root_id
+
+    client.post("/v1/collections", json={"name": "empty-leaf", "parent_id": sub_id})
+
+    raw = b"doc in subfolder."
+    up = client.post(
+        f"/v1/collections/{sub_id}/documents",
+        files={"file": ("nest.txt", io.BytesIO(raw), "text/plain")},
+    )
+    assert up.status_code == 200
+
+    tr = client.get("/v1/collections/tree")
+    assert tr.status_code == 200
+    tree = tr.json()
+    assert isinstance(tree, list)
+    root = next(t for t in tree if t["id"] == root_id)
+    assert root["type"] == "section"
+    sub = next(c for c in root["children"] if c["id"] == sub_id)
+    assert sub["type"] == "section"
+    assert any(d["name"] == "nest.txt" for d in sub["documents"])
+    assert any(c["name"] == "empty-leaf" for c in sub["children"])
+    empty = next(c for c in sub["children"] if c["name"] == "empty-leaf")
+    assert empty["documents"] == []
+
+
+def test_knowledge_stats(client: TestClient) -> None:
+    r = client.get("/v1/knowledge/stats")
+    assert r.status_code == 200
+    s = r.json()
+    for k in (
+        "sections_count",
+        "documents_count",
+        "chunks_count",
+        "embedding_vectors_count",
+        "document_files_size_bytes",
+        "metadata_db_size_bytes",
+        "chroma_storage_size_bytes",
+        "data_dir_size_bytes",
+        "chat_threads_count",
+        "chat_messages_count",
+        "audit_log_rows",
+    ):
+        assert k in s
+    assert isinstance(s["chunks_count"], int)
+
+
+def test_patch_collection_and_document(client: TestClient) -> None:
+    r = client.post("/v1/collections", json={"name": "pre-name"})
+    cid = r.json()["id"]
+    up = client.post(
+        f"/v1/collections/{cid}/documents",
+        files={"file": ("orig.txt", io.BytesIO(b"hi"), "text/plain")},
+    )
+    assert up.status_code == 200
+    did = up.json()["id"]
+
+    pr = client.patch(
+        f"/v1/collections/{cid}",
+        json={"name": "post-name"},
+    )
+    assert pr.status_code == 200
+    assert pr.json()["name"] == "post-name"
+
+    dr = client.patch(
+        f"/v1/collections/{cid}/documents/{did}",
+        json={"filename": "renamed.txt"},
+    )
+    assert dr.status_code == 200
+    assert dr.json()["filename"] == "renamed.txt"
+
+
+def test_patch_collection_cycle_returns_400(client: TestClient) -> None:
+    a = client.post("/v1/collections", json={"name": "a"}).json()["id"]
+    b = client.post(
+        "/v1/collections",
+        json={"name": "b", "parent_id": a},
+    ).json()["id"]
+    r = client.patch(f"/v1/collections/{a}", json={"parent_id": b})
+    assert r.status_code == 400
+    assert "cycle" in (r.json().get("detail") or "").lower()
+
+
+def test_delete_collection_recursive_subtree(client: TestClient) -> None:
+    root = client.post("/v1/collections", json={"name": "del-root"}).json()["id"]
+    ch = client.post(
+        "/v1/collections",
+        json={"name": "del-ch", "parent_id": root},
+    ).json()["id"]
+    d = client.delete(f"/v1/collections/{root}")
+    assert d.status_code == 200
+    lst = client.get("/v1/collections").json()
+    ids = {x["id"] for x in lst}
+    assert root not in ids
+    assert ch not in ids
+
+
+def test_member_can_read_tree_and_stats(client_rbac: TestClient) -> None:
+    t = client_rbac.get(
+        "/v1/collections/tree",
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert t.status_code == 200
+    s = client_rbac.get(
+        "/v1/knowledge/stats",
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert s.status_code == 200
+
+
+def test_member_forbidden_patch_section(client_rbac: TestClient) -> None:
+    r = client_rbac.post(
+        "/v1/collections",
+        json={"name": "mp"},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    cid = r.json()["id"]
+    p = client_rbac.patch(
+        f"/v1/collections/{cid}",
+        json={"name": "nope"},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert p.status_code == 403
+
+
+def test_move_document_between_sections_tree_and_chroma(client: TestClient) -> None:
+    from app import deps
+
+    a = client.post("/v1/collections", json={"name": "move-a"}).json()["id"]
+    b = client.post("/v1/collections", json={"name": "move-b"}).json()["id"]
+    raw = b"chunkable text " * 40
+    up = client.post(
+        f"/v1/collections/{a}/documents",
+        files={"file": ("m.txt", io.BytesIO(raw), "text/plain")},
+    )
+    assert up.status_code == 200
+    did = up.json()["id"]
+    store = deps.get_chroma()
+    n_before = store.count_chunks_for_document(a, did)
+    assert n_before >= 1
+    assert store.count_chunks_for_document(b, did) == 0
+
+    mv = client.post(
+        f"/v1/collections/{b}/documents/{did}/move",
+        json={"source_collection_id": a},
+    )
+    assert mv.status_code == 200
+    assert mv.json()["collection_id"] == b
+
+    assert store.count_chunks_for_document(a, did) == 0
+    assert store.count_chunks_for_document(b, did) == n_before
+
+    tr = client.get("/v1/collections/tree")
+    assert tr.status_code == 200
+
+    def find_doc_ids(node: dict) -> set[str]:
+        out = {d["id"] for d in node.get("documents", [])}
+        for ch in node.get("children", []) or []:
+            out |= find_doc_ids(ch)
+        return out
+
+    under_a = under_b = False
+    for root in tr.json():
+        if root["id"] == a:
+            under_a = did in find_doc_ids(root)
+        if root["id"] == b:
+            under_b = did in find_doc_ids(root)
+    assert not under_a
+    assert under_b
+
+
+def test_move_document_noop_same_collection(client: TestClient) -> None:
+    cid = client.post("/v1/collections", json={"name": "same"}).json()["id"]
+    up = client.post(
+        f"/v1/collections/{cid}/documents",
+        files={"file": ("s.txt", io.BytesIO(b"same"), "text/plain")},
+    )
+    assert up.status_code == 200
+    did = up.json()["id"]
+    mv = client.post(
+        f"/v1/collections/{cid}/documents/{did}/move",
+        json={"source_collection_id": cid},
+    )
+    assert mv.status_code == 200
+    assert mv.json()["collection_id"] == cid
+
+
+def test_move_document_404(client: TestClient) -> None:
+    a = client.post("/v1/collections", json={"name": "x"}).json()["id"]
+    b = client.post("/v1/collections", json={"name": "y"}).json()["id"]
+    bad = "00000000-0000-0000-0000-000000000099"
+    r = client.post(
+        f"/v1/collections/{b}/documents/{bad}/move",
+        json={"source_collection_id": a},
+    )
+    assert r.status_code == 404
+    up = client.post(
+        f"/v1/collections/{a}/documents",
+        files={"file": ("z.txt", io.BytesIO(b"z"), "text/plain")},
+    )
+    did = up.json()["id"]
+    r2 = client.post(
+        f"/v1/collections/{b}/documents/{did}/move",
+        json={"source_collection_id": bad},
+    )
+    assert r2.status_code == 404
+    r3 = client.post(
+        f"/v1/collections/{bad}/documents/{did}/move",
+        json={"source_collection_id": a},
+    )
+    assert r3.status_code == 404
+
+
+def test_member_forbidden_move_document(client_rbac: TestClient) -> None:
+    a = client_rbac.post(
+        "/v1/collections",
+        json={"name": "ma"},
+        headers={"X-API-Key": "adm-secret"},
+    ).json()["id"]
+    b = client_rbac.post(
+        "/v1/collections",
+        json={"name": "mb"},
+        headers={"X-API-Key": "adm-secret"},
+    ).json()["id"]
+    up = client_rbac.post(
+        f"/v1/collections/{a}/documents",
+        files={"file": ("t.txt", io.BytesIO(b"move me"), "text/plain")},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert up.status_code == 200
+    did = up.json()["id"]
+    mv = client_rbac.post(
+        f"/v1/collections/{b}/documents/{did}/move",
+        json={"source_collection_id": a},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert mv.status_code == 403

@@ -1,9 +1,16 @@
 # CHANGELOG
 
+## 2026-04-26
+
+### Changed
+
+- Веб-админка, вкладка «Документы» — дерево слева: более компактные отступы строк и вложенности; **DnD** переносится **за иконку** папки/файла (старые ручки `⋮⋮` убраны); иконка подсвечивается при наведении. У **обрезанного** `ellipsis` текста в `title` подставляется **полное имя** (для файлов — как в данных, с расширением); у полностью видимой подписи `title` не дублирует текст. Подписка на `resize` панели и `ResizeObserver` на контейнере дерева — пересчёт подсказок при смене ширины сайдбара.
+
 ## 2026-04-25
 
 ### Added
 
+- **Документы (веб + API):** в SQLite у разделов (`collections`) поле `parent_id` (миграция при старте); дерево разделов и документов одним запросом `GET /v1/collections/tree`; агрегированная статистика хранилища `GET /v1/knowledge/stats` (числа сущностей SQLite, размеры `metadata.db`, каталога Chroma, `APP_DATA_DIR`, чанки/эмбеддинги в Chroma); `PATCH /v1/collections/{id}` (имя, родитель), `PATCH /v1/collections/{id}/documents/{doc_id}` (переименование файла в метаданных + Chroma); **`POST /v1/collections/{target_collection_id}/documents/{document_id}/move`** с телом `{ "source_collection_id": "..." }` — перенос документа между разделами (копия чанков в Chroma в целевую коллекция, затем обновление `documents.collection_id` в SQLite, удаление чанков из исходной коллекции; при `source === target` — no-op); `POST /v1/collections` принимает опциональный `parent_id`; `DELETE /v1/collections/{id}` удаляет поддерево разделов (рекурсия: Chroma + строки БД). Веб-админка: дерево в левом баре на вкладке «Документы», **DnD** (только за handle `⋮⋮`) — перенос разделов (`PATCH` родителя) и документов (`.../move`), зона «Корень» для вывода раздела в корень; сохраняемый порядок соседей **не** хранится (нет `sort_order`), индикаторы above/below/inside лишь задают целевой раздел/родителя; карточки статистики, экран раздела (подразделы, список файлов, загрузка) и экран документа (метаданные, переименование/удаление).
 - **Избранные A/B тесты:** каталог `APP_DATA_DIR/tests_favorite/` — JSON-файлы `T000001.json`, …; API `GET/POST /v1/rag-test/favorites`, `GET/DELETE /v1/rag-test/favorites/{id}` (id вида `T` + 6 цифр). Веб-вкладка «Тесты»: кнопка **★ Favorite**, список избранного в левом баре, восстановление слепка и удаление (файл + строка в UI).
 - **Тесты RAG (веб):** форма полей `RagRuntimeProfile` (подсказки в `title`), общий блок **«Источники для теста»** (все разделы / выбранные разделы / выбор документов с `document_ids_by_collection`); импорт/экспорт/сохранение профилей по-прежнему как JSON в `localStorage`. Scope тестов независим от области RAG на вкладке «Чат» (`localStorage`: `knowledge_test_scope`).
 - **Тесты RAG (A/B):** веб-вкладка «Тесты», API префикс `/v1/rag-test/`: `run`, `compare`, CRUD `profiles`, `main-chat-profile`, `apply-to-chat` (только admin); сохранение прогонов в SQLite (`rag_test_runs`, `rag_test_run_pairs`, `rag_runtime_settings` и др.). `Polza` chat completions: `chat_completion_with_result` возвращает `model` / `provider` / `usage` для диагностики. Основной чат читает safe runtime-overrides из `rag_runtime_settings` (retrieval top-k, temperature, system prompt, distance threshold и т.д.).

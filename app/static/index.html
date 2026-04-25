@@ -25,6 +25,8 @@
       --ghost-border: rgba(72, 72, 72, 0.35);
       --focus-ring: rgba(198, 198, 199, 0.55);
       --sidebar-w: 260px;
+      --sidebar-min-w: 220px;
+      --sidebar-max-w: 480px;
       --top-h: 52px;
       --radius-md: 10px;
       --radius-lg: 14px;
@@ -57,6 +59,45 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
+      min-width: var(--sidebar-min-w);
+      max-width: var(--sidebar-max-w);
+      position: relative;
+    }
+    .sidebar-resize-handle {
+      position: absolute;
+      top: 0;
+      right: -4px;
+      width: 8px;
+      height: 100%;
+      z-index: 10;
+      cursor: ew-resize;
+      touch-action: none;
+    }
+    .sidebar-resize-handle::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 3px;
+      width: 1px;
+      height: 100%;
+      background: transparent;
+      transition: background var(--ui-ease);
+    }
+    .sidebar-resize-handle:hover::after,
+    .sidebar-resize-handle:focus-visible::after,
+    body.sidebar-resizing .sidebar-resize-handle::after {
+      background: rgba(198, 198, 199, 0.38);
+    }
+    .sidebar-resize-handle:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: -2px;
+    }
+    body.sidebar-resizing {
+      cursor: ew-resize;
+      user-select: none;
+    }
+    body.sidebar-resizing * {
+      cursor: ew-resize !important;
     }
     .sidebar-head {
       padding: 0.75rem 0.85rem;
@@ -195,6 +236,94 @@
       outline-offset: 1px;
     }
     .sidebar-hint { font-size: 0.8rem; color: var(--on-surface-variant); padding: 0.5rem; line-height: 1.4; }
+    .kb-side-title {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--on-surface-variant); margin: 0 0 0.5rem 0; font-weight: 600;
+    }
+    .kb-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+    .kb-tree-node { margin-bottom: 1px; }
+    .kb-tree-children { margin-left: 0.2rem; padding-left: 0.25rem; border-left: 1px solid var(--ghost-border); }
+    .kb-tree-children.kb-tree-collapsed { display: none; }
+    .kb-tree-row {
+      display: flex; align-items: center; gap: 0.1rem; padding: 0.2rem 0.3rem; border-radius: var(--radius-md);
+      min-height: 1.55rem; width: 100%;
+    }
+    .kb-tree-row:hover { background: var(--surface-container); }
+    .kb-tree-row.kb-active {
+      background: var(--surface-container-highest);
+      color: var(--on-surface); font-weight: 500;
+    }
+    .kb-tree-tgl {
+      width: 1.2rem; height: 1.2rem; flex-shrink: 0; border: 0; background: transparent;
+      color: var(--on-surface-variant); cursor: pointer; border-radius: 4px; line-height: 1; font-size: 0.6rem; padding: 0;
+    }
+    .kb-tree-tgl:hover { background: var(--surface-container-highest); color: var(--on-surface); }
+    .kb-tree-tgl:disabled { visibility: hidden; }
+    .kb-tree-label {
+      flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: inherit;
+      font: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .kb-doc-row .kb-tree-label { font-size: 0.8125rem; color: var(--on-surface-variant); }
+    .kb-doc-row.kb-active .kb-tree-label { color: var(--on-surface); }
+    .kb-tree-actions { display: flex; gap: 1px; flex-shrink: 0; opacity: 0.7; }
+    .kb-tree-row:hover .kb-tree-actions { opacity: 1; }
+    .kb-tree-icon {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.05rem;
+      height: 1.05rem;
+      margin-right: 0.08rem;
+      padding: 2px;
+      box-sizing: content-box;
+      color: var(--on-surface-variant);
+      cursor: grab;
+      user-select: none;
+      border-radius: 4px;
+    }
+    .kb-tree-icon:hover {
+      color: var(--on-surface);
+      background: var(--surface-container-highest);
+    }
+    .kb-tree-icon:active { cursor: grabbing; }
+    .kb-tree-icon svg { width: 0.95rem; height: 0.95rem; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .kb-tree-row.kb-active .kb-tree-icon { color: var(--on-surface); }
+    .kb-doc-row .kb-tree-icon { opacity: 0.9; }
+    .kb-tree-row.kb-drop-above { box-shadow: inset 0 3px 0 0 var(--primary); }
+    .kb-tree-row.kb-drop-below { box-shadow: inset 0 -3px 0 0 var(--primary); }
+    .kb-tree-row.kb-drop-inside { outline: 2px dashed var(--primary); outline-offset: -2px; }
+    .kb-tree-root-drop {
+      font-size: 0.7rem; text-align: center; color: var(--on-surface-variant);
+      padding: 0.3rem 0.4rem; border-radius: var(--radius-md); margin-bottom: 0.25rem;
+      border: 1px dashed var(--ghost-border);
+    }
+    .kb-tree-root-drop.kb-drop-inside { outline: 2px solid var(--primary); background: var(--surface-container); }
+    .kb-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .kb-stat-card {
+      background: var(--surface-container);
+      border: 1px solid var(--ghost-border);
+      border-radius: var(--radius-lg);
+      padding: 0.9rem 1rem;
+    }
+    .kb-stat-lbl {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--on-surface-variant); font-weight: 600; margin: 0 0 0.25rem 0;
+    }
+    .kb-stat-val { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; }
+    .kb-stat-hint { font-size: 0.7rem; color: var(--on-surface-variant); margin: 0.35rem 0 0; }
+    #tblCols { display: none; }
+    .kb-inline-list li { margin-bottom: 0.35rem; }
+    .kb-inline-list button {
+      background: var(--surface-container); border: 1px solid var(--ghost-border);
+      color: var(--on-surface); border-radius: var(--radius-md); padding: 0.35rem 0.5rem; font: inherit; cursor: pointer; width: 100%; text-align: left;
+    }
+    .kb-inline-list button:hover { background: var(--surface-container-high); }
     /* Workspace */
     .workspace {
       flex: 1;
@@ -605,6 +734,15 @@
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;
     }
+    .upload-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.85rem;
+      color: var(--on-surface-variant);
+      min-height: 2rem;
+    }
+    .upload-status .spin { flex-shrink: 0; }
     button.btn {
       display: inline-flex;
       align-items: center;
@@ -963,7 +1101,14 @@
           <ul id="chat-thread-list" aria-label="Список чатов"></ul>
         </div>
         <div class="sidebar-panel hidden" id="sidebar-docs-panel">
-          <p class="sidebar-hint">Разделы и документы — в центральной панели. Переключитесь на «Чат», чтобы видеть историю диалогов.</p>
+          <p class="kb-side-title">Структура</p>
+          <div id="kbTreeErr" class="status err" style="font-size:0.8rem; margin-bottom:0.4rem"></div>
+          <div id="kbTreeLoader" class="status" style="font-size:0.8rem; display:none" aria-live="polite">Загрузка дерева…</div>
+          <div id="kbTreeEmpty" class="sidebar-hint hidden" style="text-align:center; padding:0.75rem 0.4rem">Нет разделов. Создайте раздел в центре.</div>
+          <div id="kbTreeScroll" class="kb-tree-scroll" aria-label="Дерево разделов и документов">
+            <div id="kbTreeRootDrop" class="kb-tree-root-drop" title="Перетащите сюда, чтобы сделать раздел корневым (верхний уровень)">· Корень ·</div>
+            <div id="kbTreeMount"></div>
+          </div>
         </div>
         <div class="sidebar-panel hidden" id="sidebar-settings-panel">
           <p class="sidebar-hint">Настройки открыты справа. Иконка шестерёнки вверху.</p>
@@ -973,6 +1118,7 @@
           <ul id="test-favorite-list" aria-label="Избранные тесты"></ul>
         </div>
       </div>
+      <div class="sidebar-resize-handle" id="sidebarResizeHandle" role="separator" aria-orientation="vertical" aria-label="Изменить ширину боковой панели" tabindex="0"></div>
     </aside>
 
     <div class="workspace">
@@ -991,12 +1137,21 @@
       <main class="main-area">
         <div id="view-docs" class="view">
           <div class="view-inner">
+            <div id="knowledgeStatsErr" class="status err" style="margin-bottom:0.4rem"></div>
+            <div id="knowledgeStatsLoader" class="status" style="font-size:0.85rem; display:none; margin-bottom:0.4rem" aria-live="polite">Статистика…</div>
+            <div id="knowledgeStatsGrid" class="kb-stats-grid" aria-label="Статистика базы знаний"></div>
+
             <div class="card">
               <h2>База знаний</h2>
-              <div class="row" style="margin-bottom:0.75rem">
-                <div style="flex:1;min-width:200px">
+              <p style="color:var(--on-surface-variant); font-size:0.9rem; margin:0.25rem 0 0.75rem 0">Дерево слева. Новый раздел — в корень или в выбранный подраздел (ID родителя подставляется при выборе раздела).</p>
+              <div class="row" style="margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem">
+                <div style="flex:1; min-width:200px">
                   <label class="field" for="newColName">Новый раздел</label>
                   <input type="text" id="newColName" placeholder="Имя раздела" />
+                </div>
+                <div style="flex:1; min-width:200px">
+                  <label class="field" for="newColParentId">ID родителя (опц.)</label>
+                  <input type="text" id="newColParentId" class="mono" placeholder="корень = пусто" autocomplete="off" />
                 </div>
                 <div style="align-self:flex-end">
                   <button type="button" class="btn" id="btnCreateCol">Создать</button>
@@ -1005,23 +1160,47 @@
                   <button type="button" class="btn secondary" id="btnRefreshCols">Обновить</button>
                 </div>
               </div>
+              <p id="newColParentHint" class="sidebar-hint" style="display:none; margin:0 0 0.5rem 0; font-size:0.8rem"></p>
               <div id="colErr" class="status err"></div>
               <table id="tblCols"><thead><tr><th>ID</th><th>Имя</th><th></th></tr></thead><tbody></tbody></table>
             </div>
 
-            <div class="card hidden" id="colPanel">
-              <h2>Раздел: <span id="selName"></span></h2>
-              <p class="mono" id="selId"></p>
-              <div class="drop-zone" id="dropZone">
-                Перетащите файл сюда или выберите ниже
+            <div class="card" id="docsContentCard" style="margin-top:0.5rem">
+              <div id="docsNoSelection" class="sidebar-hint" style="text-align:center; padding:1.25rem 0.5rem">
+                Выберите раздел или документ в дереве слева.
               </div>
-              <div class="row" style="margin:0.5rem 0">
-                <input type="file" id="fileIn" />
-                <button type="button" class="btn" id="btnUpload">Загрузить</button>
-                <button type="button" class="btn danger" id="btnDelCol">Удалить раздел</button>
+              <div class="hidden" id="colPanel">
+                <h2>Раздел: <span id="selName"></span></h2>
+                <p class="mono" id="selId"></p>
+                <div class="row" style="margin:0.4rem 0; gap:0.35rem; flex-wrap:wrap">
+                  <button type="button" class="btn secondary" id="btnEditSection">Переименовать</button>
+                  <button type="button" class="btn danger" id="btnDelCol">Удалить раздел</button>
+                </div>
+                <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:1rem 0 0.4rem 0">Подразделы</h3>
+                <ul id="sectionChildrenList" class="kb-inline-list" style="list-style:none; padding:0; margin:0 0 0.75rem 0; min-height:0"></ul>
+                <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Загрузка</h3>
+                <div class="drop-zone" id="dropZone">Перетащите файл сюда или выберите ниже</div>
+                <div class="row" style="margin:0.5rem 0">
+                  <input type="file" id="fileIn" />
+                  <button type="button" class="btn" id="btnUpload">Загрузить</button>
+                  <div id="uploadStatus" class="upload-status hidden" role="status" aria-live="polite" aria-busy="false">
+                    <span class="spin" aria-hidden="true"></span>
+                    <span>Загружаю файл...</span>
+                  </div>
+                </div>
+                <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Документы в разделе</h3>
+                <div id="docErr" class="status err"></div>
+                <table id="tblDocs"><thead><tr><th>Документ</th><th>Размер</th><th></th></tr></thead><tbody></tbody></table>
               </div>
-              <div id="docErr" class="status err"></div>
-              <table id="tblDocs"><thead><tr><th>Документ</th><th>Размер</th><th></th></tr></thead><tbody></tbody></table>
+              <div class="hidden" id="docDetailPanel">
+                <h2 id="docDetailTitle" style="margin-top:0">Документ</h2>
+                <p class="mono" id="docDetailId"></p>
+                <p id="docDetailMeta" style="color:var(--on-surface-variant); font-size:0.875rem; white-space:pre-wrap; margin:0.5rem 0"></p>
+                <div class="row" style="margin:0.75rem 0; gap:0.35rem; flex-wrap:wrap">
+                  <button type="button" class="btn secondary" id="btnEditDoc">Переименовать</button>
+                  <button type="button" class="btn danger" id="btnDelDocFromDetail">Удалить</button>
+                </div>
+              </div>
             </div>
             <footer class="doc-foot">
               <a href="/docs">OpenAPI</a> · <a href="/redoc">ReDoc</a>
@@ -1332,12 +1511,742 @@
     const cidStore = "knowledge_selected_cid";
     const ragScopeStore = "knowledge_rag_scope";
     const threadStore = "knowledge_active_thread_id";
+    const sidebarWidthStore = "knowledge_sidebar_width";
     let selectedCid = null;
     let ragScope = { all: true, ids: [] };
     let activeThreadId = null;
     let authConfigured = false;
     const collections = [];
     let currentView = "chat";
+    const knowledgeSelStore = "knowledge_ui_selection";
+    let knowledgeTreeRoots = [];
+    let knowledgeSelection = null;
+    let treeCollapsedIds = new Set();
+    let currentDocDetail = null;
+
+    function formatBytes(n) {
+      if (n == null || !Number.isFinite(Number(n))) return "—";
+      let x = Number(n);
+      const u = ["B", "KB", "MB", "GB", "TB"];
+      let i = 0;
+      while (x >= 1024 && i < u.length - 1) { x /= 1024; i += 1; }
+      return (i === 0 ? String(Math.round(x)) : (x < 10 ? x.toFixed(1) : String(Math.round(x)))) + " " + u[i];
+    }
+    function clampSidebarWidth(width) {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const min = parseInt(rootStyle.getPropertyValue("--sidebar-min-w"), 10) || 220;
+      const cssMax = parseInt(rootStyle.getPropertyValue("--sidebar-max-w"), 10) || 480;
+      const viewportMax = Math.max(min, window.innerWidth - 520);
+      const max = Math.max(min, Math.min(cssMax, viewportMax));
+      return Math.min(Math.max(width, min), max);
+    }
+    function applySidebarWidth(width, persist) {
+      const next = clampSidebarWidth(width);
+      document.documentElement.style.setProperty("--sidebar-w", next + "px");
+      if (persist) {
+        try { localStorage.setItem(sidebarWidthStore, String(next)); } catch (e) { /* */ }
+      }
+      return next;
+    }
+    function initSidebarResize() {
+      const sidebar = $("sidebar");
+      const handle = $("sidebarResizeHandle");
+      if (!sidebar || !handle) return;
+
+      let resizing = false;
+      let startX = 0;
+      let startWidth = 0;
+      let preferredWidth = sidebar.getBoundingClientRect().width;
+
+      try {
+        const saved = Number(localStorage.getItem(sidebarWidthStore));
+        if (Number.isFinite(saved) && saved > 0) {
+          preferredWidth = saved;
+          applySidebarWidth(preferredWidth, false);
+        }
+      } catch (e) { /* */ }
+
+      function stopResize() {
+        if (!resizing) return;
+        resizing = false;
+        document.body.classList.remove("sidebar-resizing");
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", stopResize);
+        document.removeEventListener("mouseleave", onDocumentMouseLeave);
+        window.removeEventListener("blur", stopResize);
+      }
+      function onMouseMove(e) {
+        if (!resizing) return;
+        e.preventDefault();
+        preferredWidth = startWidth + e.clientX - startX;
+        applySidebarWidth(preferredWidth, true);
+      }
+      function onDocumentMouseLeave(e) {
+        if (!e.relatedTarget) stopResize();
+      }
+      handle.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        resizing = true;
+        startX = e.clientX;
+        startWidth = sidebar.getBoundingClientRect().width;
+        document.body.classList.add("sidebar-resizing");
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", stopResize);
+        document.addEventListener("mouseleave", onDocumentMouseLeave);
+        window.addEventListener("blur", stopResize);
+      });
+      window.addEventListener("resize", () => {
+        applySidebarWidth(preferredWidth, false);
+      });
+    }
+    initSidebarResize();
+    function loadTreeCollapsed() {
+      try {
+        const r = localStorage.getItem("knowledge_tree_collapsed");
+        if (r) treeCollapsedIds = new Set(JSON.parse(r));
+      } catch (e) { treeCollapsedIds = new Set(); }
+    }
+    function saveTreeCollapsed() {
+      try { localStorage.setItem("knowledge_tree_collapsed", JSON.stringify([...treeCollapsedIds])); } catch (e) { /* */ }
+    }
+    function isSectionExpanded(id) { return !treeCollapsedIds.has(id); }
+    function toggleSectionExpand(id) {
+      if (treeCollapsedIds.has(id)) treeCollapsedIds.delete(id);
+      else treeCollapsedIds.add(id);
+      saveTreeCollapsed();
+      renderKbTree();
+    }
+    function findSectionNode(id, nodes) {
+      const list = nodes || knowledgeTreeRoots;
+      for (const n of list) {
+        if (n.id === id) return n;
+        const f = findSectionNode(id, n.children || []);
+        if (f) return f;
+      }
+      return null;
+    }
+    function findParentOfSection(sectionId) {
+      function walk(nodes, parent) {
+        for (const n of nodes || []) {
+          if (n.id === sectionId) return parent;
+          const r = walk(n.children || [], n.id);
+          if (r !== undefined) return r;
+        }
+        return undefined;
+      }
+      const r = walk(knowledgeTreeRoots, null);
+      return r === undefined ? null : r;
+    }
+    function isDescendantSection(maybeDescendantId, ancestorId) {
+      const a = findSectionNode(ancestorId);
+      if (!a) return false;
+      function w(n) {
+        if (n.id === maybeDescendantId) return true;
+        for (const c of n.children || []) if (w(c)) return true;
+        return false;
+      }
+      for (const c of a.children || []) if (w(c)) return true;
+      return false;
+    }
+    function wouldCreateSectionCycle(dragId, newParent) {
+      if (newParent == null || newParent === "") return false;
+      if (newParent === dragId) return true;
+      return isDescendantSection(newParent, dragId);
+    }
+    function getCurrentSectionParentId(sid) {
+      return findParentOfSection(sid);
+    }
+    let treeDndPayload = null;
+    let treeDndOverEl = null;
+    function clearTreeDropClasses() {
+      document.querySelectorAll(".kb-tree-row.kb-drop-above, .kb-tree-row.kb-drop-below, .kb-tree-row.kb-drop-inside").forEach((el) => {
+        el.classList.remove("kb-drop-above", "kb-drop-below", "kb-drop-inside");
+      });
+      const z = $("kbTreeRootDrop");
+      if (z) z.classList.remove("kb-drop-inside");
+      treeDndOverEl = null;
+    }
+    function computeRowDropIntent(row, clientY) {
+      const r = row.getBoundingClientRect();
+      const t = (clientY - r.top) / Math.max(r.height, 1);
+      const kb = row.getAttribute("data-kb");
+      if (kb === "doc") {
+        if (t < 0.5) return "above";
+        return "below";
+      }
+      if (t < 0.35) return "above";
+      if (t > 0.65) return "below";
+      return "inside";
+    }
+    function resolveDocumentTargetCollectionId(row, intent) {
+      const kb = row.getAttribute("data-kb");
+      const sid = row.getAttribute("data-sid");
+      if (!sid) return null;
+      if (kb === "doc") return sid;
+      if (kb === "section") {
+        if (intent === "inside") return sid;
+        const pid = row.getAttribute("data-pid") || "";
+        return pid || sid;
+      }
+      return null;
+    }
+    function resolveSectionNewParentId(row, intent) {
+      const kb = row.getAttribute("data-kb");
+      if (intent === "inside") {
+        if (kb === "section") return row.getAttribute("data-sid");
+        return null;
+      }
+      if (kb === "section") {
+        const p = row.getAttribute("data-pid") || "";
+        return p || null;
+      }
+      if (kb === "doc") {
+        return findParentOfSection(row.getAttribute("data-sid"));
+      }
+      return null;
+    }
+    function bindTreeDragHandle(el) {
+      el.setAttribute("draggable", "true");
+      el.addEventListener("dragstart", (e) => {
+        e.stopPropagation();
+        const row = el.closest(".kb-tree-row");
+        if (!row) return;
+        const kb = row.getAttribute("data-kb");
+        if (kb === "section") {
+          const id = row.getAttribute("data-sid");
+          treeDndPayload = { t: "section", id: id, curParent: getCurrentSectionParentId(id) };
+          e.dataTransfer.setData("application/x-kb-tree", JSON.stringify({ t: "section", id: id }));
+        } else if (kb === "doc") {
+          const sid = row.getAttribute("data-sid");
+          const did = row.getAttribute("data-did");
+          treeDndPayload = { t: "doc", docId: did, source: sid };
+          e.dataTransfer.setData("application/x-kb-tree", JSON.stringify({ t: "doc", docId: did, source: sid }));
+        } else {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", "kb"); } catch (err) { /* */ }
+      });
+      el.addEventListener("dragend", () => {
+        treeDndPayload = null;
+        clearTreeDropClasses();
+      });
+    }
+    async function runKbTreeDrop(payload, ev) {
+      errBox($("kbTreeErr"), "");
+      const rootZ = ev.target && ev.target.closest && ev.target.closest("#kbTreeRootDrop");
+      const row = ev.target && ev.target.closest && ev.target.closest(".kb-tree-row");
+      const intent = (row && (computeRowDropIntent(row, ev.clientY))) || (rootZ ? "inside" : null);
+      if (!rootZ && !row) {
+        clearTreeDropClasses();
+        return;
+      }
+      const normP = (x) => (x == null || x === "" ? null : x);
+      let reopenDocAfter = null;
+      try {
+        if (payload.t === "section") {
+          let newParent = undefined;
+          if (rootZ) {
+            newParent = null;
+          } else if (row) {
+            const kb = row.getAttribute("data-kb");
+            if (kb === "doc") {
+              if (intent === "above" || intent === "below") {
+                newParent = resolveSectionNewParentId(row, intent);
+              } else {
+                return;
+              }
+            } else if (kb === "section") {
+              if (intent === "inside") newParent = row.getAttribute("data-sid");
+              else if (intent === "above" || intent === "below") newParent = resolveSectionNewParentId(row, intent);
+            }
+          }
+          if (newParent === undefined) return;
+          const dragId = payload.id;
+          if (wouldCreateSectionCycle(dragId, newParent)) {
+            errBox($("kbTreeErr"), "Нельзя перенести раздел: получится циклическая вложенность.");
+            return;
+          }
+          if (normP(newParent) === normP(getCurrentSectionParentId(dragId))) return;
+          const r = await fetch(
+            apiPath("/v1/collections/" + encodeURIComponent(dragId)),
+            { method: "PATCH", headers: headers(true), body: JSON.stringify({ parent_id: newParent }) }
+          );
+          if (!r.ok) throw new Error(await r.text());
+        } else if (payload.t === "doc") {
+          if (rootZ) {
+            errBox($("kbTreeErr"), "Документ нельзя положить в «Корень» — перетащите в раздел.");
+            return;
+          }
+          if (!row) return;
+          const targetCid = resolveDocumentTargetCollectionId(row, intent);
+          if (!targetCid) return;
+          if (targetCid === payload.source) return;
+          const r = await fetch(
+            apiPath(
+              "/v1/collections/" + encodeURIComponent(targetCid) + "/documents/" + encodeURIComponent(payload.docId) + "/move"
+            ),
+            { method: "POST", headers: headers(true), body: JSON.stringify({ source_collection_id: payload.source }) }
+          );
+          if (!r.ok) throw new Error(await r.text());
+          if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === payload.docId) {
+            localStorage.setItem(cidStore, targetCid);
+            knowledgeSelection = { type: "document", sectionId: targetCid, documentId: payload.docId };
+            try { localStorage.setItem(knowledgeSelStore, JSON.stringify(knowledgeSelection)); } catch (e) { /* */ }
+            selectedCid = targetCid;
+            reopenDocAfter = { cid: targetCid, did: payload.docId };
+          }
+        }
+        await loadCollections();
+        if (reopenDocAfter) {
+          const rc = reopenDocAfter.cid;
+          const rd = reopenDocAfter.did;
+          const nn = findSectionNode(rc);
+          const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(rc) + "/documents"), { headers: headers(false) });
+          if (rr.ok) {
+            const list = await rr.json();
+            const drow = (list || []).find((x) => x.id === rd);
+            if (drow && nn) {
+              openDocumentDetail(
+                { id: drow.id, name: drow.filename, size_bytes: drow.size_bytes, mime: drow.mime, created_at: drow.created_at },
+                nn
+              );
+            }
+          }
+        }
+      } catch (e) {
+        errBox($("kbTreeErr"), String(e));
+      } finally {
+        clearTreeDropClasses();
+        treeDndPayload = null;
+      }
+    }
+    function onKbTreeContainerDragOver(ev) {
+      if (!treeDndPayload) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      const sc = $("kbTreeScroll");
+      if (!sc || !sc.contains(ev.target)) return;
+      const rootZ = ev.target.closest && ev.target.closest("#kbTreeRootDrop");
+      const row = ev.target.closest && ev.target.closest(".kb-tree-row");
+      clearTreeDropClasses();
+      if (rootZ) {
+        if (treeDndPayload.t === "section") {
+          rootZ.classList.add("kb-drop-inside");
+          treeDndOverEl = rootZ;
+        }
+        return;
+      }
+      if (!row) return;
+      const int = computeRowDropIntent(row, ev.clientY);
+      row.classList.add(int === "inside" ? "kb-drop-inside" : int === "above" ? "kb-drop-above" : "kb-drop-below");
+      treeDndOverEl = row;
+    }
+    function onKbTreeContainerDrop(ev) {
+      const p = treeDndPayload;
+      if (!p) {
+        let parsed = null;
+        try {
+          const raw = ev.dataTransfer.getData("application/x-kb-tree");
+          if (raw) parsed = JSON.parse(raw);
+        } catch (e) { /* */ }
+        if (!parsed) return;
+        ev.preventDefault();
+        void runKbTreeDrop(parsed, ev);
+        return;
+      }
+      ev.preventDefault();
+      void runKbTreeDrop(p, ev);
+    }
+    function initKbTreeDnD() {
+      const sc = $("kbTreeScroll");
+      if (!sc || sc.__kbDndInited) return;
+      sc.__kbDndInited = true;
+      sc.addEventListener("dragover", onKbTreeContainerDragOver);
+      sc.addEventListener("drop", onKbTreeContainerDrop);
+      document.addEventListener("dragend", () => { treeDndPayload = null; clearTreeDropClasses(); });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          clearTreeDropClasses();
+          treeDndPayload = null;
+        }
+      });
+    }
+    function markTreeActive() {
+      document.querySelectorAll(".kb-tree-row").forEach((el) => {
+        el.classList.remove("kb-active");
+        if (!knowledgeSelection) return;
+        const k = el.getAttribute("data-kb");
+        if (k === "section" && knowledgeSelection.type === "section" && el.getAttribute("data-sid") === knowledgeSelection.sectionId) {
+          el.classList.add("kb-active");
+        }
+        if (k === "doc" && knowledgeSelection.type === "document" && el.getAttribute("data-sid") === knowledgeSelection.sectionId && el.getAttribute("data-did") === knowledgeSelection.documentId) {
+          el.classList.add("kb-active");
+        }
+      });
+    }
+    function refreshKbTreeLabelTitles() {
+      const sc = $("kbTreeScroll");
+      if (!sc) return;
+      sc.querySelectorAll(".kb-tree-label").forEach((lab) => {
+        const full = lab.getAttribute("data-full-name");
+        const text = (full != null && full !== "" ? full : (lab.textContent || "")).trim();
+        if (lab.scrollWidth > lab.clientWidth) {
+          if (text) lab.setAttribute("title", text);
+        } else {
+          lab.removeAttribute("title");
+        }
+      });
+    }
+    function scheduleKbTreeLabelTitles() {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => refreshKbTreeLabelTitles());
+      });
+    }
+    function initKbTreeLabelTitles() {
+      const sc = $("kbTreeScroll");
+      if (!sc || sc.__kbTreeTitlesInited) return;
+      sc.__kbTreeTitlesInited = true;
+      let t;
+      const run = () => {
+        clearTimeout(t);
+        t = setTimeout(() => scheduleKbTreeLabelTitles(), 80);
+      };
+      window.addEventListener("resize", run);
+      if (typeof ResizeObserver !== "undefined") {
+        const ro = new ResizeObserver(run);
+        ro.observe(sc);
+        sc.__kbTreeTitleRO = ro;
+      }
+    }
+    function showDocsPlaceholder() {
+      knowledgeSelection = null;
+      currentDocDetail = null;
+      try { localStorage.removeItem(knowledgeSelStore); } catch (e) { /* */ }
+      selectedCid = null;
+      localStorage.removeItem(cidStore);
+      if ($("docsNoSelection")) $("docsNoSelection").classList.remove("hidden");
+      if ($("colPanel")) $("colPanel").classList.add("hidden");
+      if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
+      if ($("newColParentHint")) { $("newColParentHint").style.display = "none"; }
+      if ($("newColParentId")) $("newColParentId").value = "";
+      markTreeActive();
+    }
+    function fillSectionChildrenFromTree(sectionId) {
+      const ul = $("sectionChildrenList");
+      if (!ul) return;
+      ul.innerHTML = "";
+      const node = findSectionNode(sectionId);
+      if (!node || !node.children || !node.children.length) {
+        const li = document.createElement("li");
+        li.textContent = "—";
+        li.style.cssText = "color:var(--on-surface-variant); font-size:0.85rem";
+        ul.appendChild(li);
+        return;
+      }
+      for (const ch of node.children) {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = ch.name;
+        b.onclick = () => { openSectionInMain(ch); };
+        li.appendChild(b);
+        ul.appendChild(li);
+      }
+    }
+    function openSectionInMain(node) {
+      const c = { id: node.id, name: node.name };
+      selectCollection(c);
+    }
+    function kbTreeIconEl(kind) {
+      const s = document.createElement("span");
+      s.className = "kb-tree-icon kb-tree-icon--" + kind;
+      s.setAttribute("aria-hidden", "true");
+      if (kind === "folder") {
+        s.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2a1 1 0 0 1-.5-.1l-1.1-.5A1 1 0 0 0 8.7 3H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>';
+      } else {
+        s.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v6h6"/></svg>';
+      }
+      return s;
+    }
+    function openDocumentDetail(d, parentNode) {
+      currentDocDetail = Object.assign({}, d, { _section: parentNode.id });
+      knowledgeSelection = { type: "document", sectionId: parentNode.id, documentId: d.id };
+      try { localStorage.setItem(knowledgeSelStore, JSON.stringify(knowledgeSelection)); } catch (e) { /* */ }
+      selectedCid = parentNode.id;
+      localStorage.setItem(cidStore, selectedCid);
+      if ($("colPanel")) $("colPanel").classList.add("hidden");
+      if ($("docDetailPanel")) $("docDetailPanel").classList.remove("hidden");
+      if ($("docsNoSelection")) $("docsNoSelection").classList.add("hidden");
+      if ($("docDetailTitle")) $("docDetailTitle").textContent = d.name || d.id;
+      if ($("docDetailId")) $("docDetailId").textContent = d.id;
+      const lines = [
+        "Раздел: " + parentNode.name,
+        "Размер: " + (d.size_bytes != null ? formatBytes(d.size_bytes) : "—"),
+        d.mime != null && d.mime !== "" ? "MIME: " + d.mime : "",
+        "Создан: " + d.created_at,
+      ].filter((x) => x && String(x).length);
+      if ($("docDetailMeta")) $("docDetailMeta").textContent = lines.join("\n");
+      markTreeActive();
+    }
+    function renderDocNode(d, parentNode, depth) {
+      const row = document.createElement("div");
+      row.className = "kb-tree-row kb-doc-row";
+      row.style.paddingLeft = (2 + depth * 6) + "px";
+      row.setAttribute("data-kb", "doc");
+      row.setAttribute("data-sid", parentNode.id);
+      row.setAttribute("data-did", d.id);
+      const tgl = document.createElement("button");
+      tgl.type = "button";
+      tgl.className = "kb-tree-tgl";
+      tgl.disabled = true;
+      tgl.textContent = "·";
+      tgl.setAttribute("aria-hidden", "true");
+      const lab = document.createElement("button");
+      lab.type = "button";
+      lab.className = "kb-tree-label";
+      const docName = d.name != null ? String(d.name) : "";
+      lab.setAttribute("data-full-name", docName);
+      lab.textContent = docName;
+      lab.onclick = (e) => { e.stopPropagation(); openDocumentDetail(d, parentNode); };
+      const ico = kbTreeIconEl("file");
+      ico.title = "Перетащить документ";
+      bindTreeDragHandle(ico);
+      const act = document.createElement("div");
+      act.className = "kb-tree-actions";
+      const bE = document.createElement("button");
+      bE.type = "button";
+      bE.className = "icon-btn";
+      bE.textContent = "✎";
+      bE.title = "Переименовать";
+      bE.onclick = (e) => { e.stopPropagation(); renameDocumentFlow(parentNode, d); };
+      const bD = document.createElement("button");
+      bD.type = "button";
+      bD.className = "icon-btn";
+      bD.textContent = "🗑";
+      bD.title = "Удалить";
+      bD.onclick = (e) => { e.stopPropagation(); deleteDocumentFlow(parentNode, d); };
+      act.appendChild(bE);
+      act.appendChild(bD);
+      row.appendChild(tgl);
+      row.appendChild(ico);
+      row.appendChild(lab);
+      row.appendChild(act);
+      return row;
+    }
+    function renderSectionNode(node, depth, parentId) {
+      const wrap = document.createElement("div");
+      wrap.className = "kb-tree-node";
+      const childSecs = node.children && node.children.length;
+      const docs = node.documents && node.documents.length;
+      const hasNested = (childSecs || docs) > 0;
+      const open = isSectionExpanded(node.id);
+      const row = document.createElement("div");
+      row.className = "kb-tree-row";
+      row.style.paddingLeft = (2 + depth * 6) + "px";
+      row.setAttribute("data-kb", "section");
+      row.setAttribute("data-sid", node.id);
+      row.setAttribute("data-pid", parentId != null && parentId !== "" ? parentId : "");
+      const tgl = document.createElement("button");
+      tgl.type = "button";
+      tgl.className = "kb-tree-tgl";
+      tgl.setAttribute("aria-label", "Свернуть или раскрыть");
+      tgl.textContent = hasNested ? (open ? "▼" : "▶") : "·";
+      tgl.disabled = !hasNested;
+      if (hasNested) {
+        tgl.onclick = (e) => { e.stopPropagation(); toggleSectionExpand(node.id); };
+      }
+      const lab = document.createElement("button");
+      lab.type = "button";
+      lab.className = "kb-tree-label";
+      const secName = node.name != null ? String(node.name) : "";
+      lab.setAttribute("data-full-name", secName);
+      lab.textContent = secName;
+      lab.style.fontWeight = "500";
+      lab.onclick = (e) => { e.stopPropagation(); openSectionInMain(node); };
+      const ico = kbTreeIconEl("folder");
+      ico.title = "Перетащить раздел";
+      bindTreeDragHandle(ico);
+      const act = document.createElement("div");
+      act.className = "kb-tree-actions";
+      const bE = document.createElement("button");
+      bE.type = "button";
+      bE.className = "icon-btn";
+      bE.textContent = "✎";
+      bE.title = "Переименовать раздел";
+      bE.onclick = (e) => { e.stopPropagation(); editSectionDialog(node); };
+      const bD = document.createElement("button");
+      bD.type = "button";
+      bD.className = "icon-btn";
+      bD.textContent = "🗑";
+      bD.title = "Удалить раздел";
+      bD.onclick = (e) => { e.stopPropagation(); deleteSectionFromTree(node); };
+      act.appendChild(bE);
+      act.appendChild(bD);
+      row.appendChild(tgl);
+      row.appendChild(ico);
+      row.appendChild(lab);
+      row.appendChild(act);
+      wrap.appendChild(row);
+      if (!hasNested || !open) return wrap;
+      const inner = document.createElement("div");
+      inner.className = "kb-tree-children";
+      for (const ch of (node.children || [])) {
+        inner.appendChild(renderSectionNode(ch, depth + 1, node.id));
+      }
+      for (const d of (node.documents || [])) {
+        inner.appendChild(renderDocNode(d, node, depth + 1));
+      }
+      wrap.appendChild(inner);
+      return wrap;
+    }
+    function renderKbTree() {
+      const mount = $("kbTreeMount");
+      if (!mount) return;
+      loadTreeCollapsed();
+      mount.innerHTML = "";
+      if (!knowledgeTreeRoots || !knowledgeTreeRoots.length) {
+        if ($("kbTreeEmpty")) $("kbTreeEmpty").classList.remove("hidden");
+        return;
+      }
+      if ($("kbTreeEmpty")) $("kbTreeEmpty").classList.add("hidden");
+      for (const n of knowledgeTreeRoots) {
+        mount.appendChild(renderSectionNode(n, 0, null));
+      }
+      markTreeActive();
+      initKbTreeLabelTitles();
+      scheduleKbTreeLabelTitles();
+    }
+    async function loadKnowledgeTree() {
+      if ($("kbTreeLoader")) $("kbTreeLoader").style.display = "block";
+      errBox($("kbTreeErr"), "");
+      try {
+        const r = await fetch(apiPath("/v1/collections/tree"), { headers: headers(false) });
+        if ($("kbTreeLoader")) $("kbTreeLoader").style.display = "none";
+        if (!r.ok) throw new Error(await r.text());
+        knowledgeTreeRoots = await r.json();
+        renderKbTree();
+      } catch (e) {
+        if ($("kbTreeLoader")) $("kbTreeLoader").style.display = "none";
+        errBox($("kbTreeErr"), String(e));
+      }
+    }
+    async function loadKnowledgeStats() {
+      if ($("knowledgeStatsLoader")) $("knowledgeStatsLoader").style.display = "block";
+      errBox($("knowledgeStatsErr"), "");
+      const grid = $("knowledgeStatsGrid");
+      if (grid) grid.innerHTML = "";
+      try {
+        const r = await fetch(apiPath("/v1/knowledge/stats"), { headers: headers(false) });
+        if ($("knowledgeStatsLoader")) $("knowledgeStatsLoader").style.display = "none";
+        if (!r.ok) throw new Error(await r.text());
+        const s = await r.json();
+        const card = (lbl, val, hint) => {
+          const c = document.createElement("div");
+          c.className = "kb-stat-card";
+          c.innerHTML = "<p class=\"kb-stat-lbl\">" + lbl + "</p><p class=\"kb-stat-val\">" + val + "</p>" + (hint ? "<p class=\"kb-stat-hint\">" + hint + "</p>" : "");
+          return c;
+        };
+        if (grid) {
+          grid.appendChild(card("Разделы", s.sections_count, "пользовательские"));
+          grid.appendChild(card("Документы", s.documents_count, "в метаданных SQLite"));
+          grid.appendChild(card("Чанки / векторы", s.chunks_count, "записей в Chroma"));
+          grid.appendChild(card("Файлы (сум.)", formatBytes(s.document_files_size_bytes), " size_bytes в БД"));
+          grid.appendChild(card("Chroma (диск)", formatBytes(s.chroma_storage_size_bytes), "каталог векторов"));
+          grid.appendChild(card("SQLite", formatBytes(s.metadata_db_size_bytes), "metadata.db"));
+          grid.appendChild(card("Data dir", formatBytes(s.data_dir_size_bytes), "всё в APP_DATA_DIR"));
+          grid.appendChild(card("Чаты / сообщения", s.chat_threads_count + " / " + s.chat_messages_count, "потоки в SQLite"));
+          grid.appendChild(card("Аудит (строк)", s.audit_log_rows, "audit_log"));
+        }
+      } catch (e) {
+        if ($("knowledgeStatsLoader")) $("knowledgeStatsLoader").style.display = "none";
+        errBox($("knowledgeStatsErr"), String(e));
+      }
+    }
+    function editSectionDialog(node) {
+      const name = window.prompt("Новое имя раздела", node.name);
+      if (name == null) return;
+      const t = name.trim();
+      if (!t) return;
+      (async () => {
+        try {
+          const r = await fetch(
+            apiPath("/v1/collections/" + encodeURIComponent(node.id)),
+            { method: "PATCH", headers: headers(true), body: JSON.stringify({ name: t }) }
+          );
+          if (!r.ok) throw new Error(await r.text());
+          await loadCollections();
+        } catch (e) { errBox($("colErr") || $("kbTreeErr"), String(e)); }
+      })();
+    }
+    function renameDocumentFlow(parentNode, d) {
+      const name = window.prompt("Новое имя файла", d.name);
+      if (name == null) return;
+      const t = name.trim();
+      if (!t) return;
+      (async () => {
+        try {
+          const r = await fetch(
+            apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents/" + encodeURIComponent(d.id)),
+            { method: "PATCH", headers: headers(true), body: JSON.stringify({ filename: t }) }
+          );
+          if (!r.ok) throw new Error(await r.text());
+          await loadDocs();
+          await loadKnowledgeTree();
+          if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === d.id) {
+            const row = await (async () => {
+              const rr = await fetch(
+                apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents"),
+                { headers: headers(false) }
+              );
+              if (!rr.ok) return null;
+              const list = await rr.json();
+              return (list || []).find((x) => x.id === d.id) || { id: d.id, name: t, size_bytes: d.size_bytes, mime: d.mime, created_at: d.created_at };
+            })();
+            openDocumentDetail(
+              { id: row.id, name: row.filename || t, size_bytes: row.size_bytes, mime: row.mime, created_at: row.created_at },
+              { id: parentNode.id, name: parentNode.name }
+            );
+          }
+        } catch (e) { errBox($("docErr") || $("kbTreeErr"), String(e)); }
+      })();
+    }
+    function deleteDocumentFlow(parentNode, d) {
+      if (!window.confirm("Удалить документ «" + (d.name || d.id) + "» из индекса?")) return;
+      (async () => {
+        try {
+          const r = await fetch(
+            apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents/" + encodeURIComponent(d.id)),
+            { method: "DELETE", headers: headers(false) }
+          );
+          if (!r.ok) throw new Error(await r.text());
+          if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === d.id) {
+            openSectionInMain(parentNode);
+          }
+          await loadDocs();
+          await loadKnowledgeTree();
+          await loadKnowledgeStats();
+        } catch (e) { errBox($("docErr") || $("kbTreeErr"), String(e)); }
+      })();
+    }
+    async function deleteSectionFromTree(node) {
+      if (!window.confirm("Удалить раздел «" + node.name + "» и все вложенные подразделы, документы и индекс?")) return;
+      errBox($("colErr"), "");
+      try {
+        const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(node.id)), { method: "DELETE", headers: headers(false) });
+        if (!r.ok) throw new Error(await r.text());
+        if (localStorage.getItem(cidStore) === node.id) localStorage.removeItem(cidStore);
+        if (knowledgeSelection && knowledgeSelection.sectionId === node.id) showDocsPlaceholder();
+        activeThreadId = null;
+        localStorage.removeItem(threadStore);
+        await loadCollections();
+      } catch (e) { errBox($("colErr") || $("kbTreeErr"), String(e)); }
+    }
 
     function headers(json) {
       const h = {};
@@ -1403,6 +2312,10 @@
         v.classList.toggle("active", v.id === "view-" + name)
       );
       setSidebarForView(name);
+      if (name === "docs") {
+        loadKnowledgeTree();
+        loadKnowledgeStats();
+      }
       if (name === "tests") loadTestFavorites();
     }
 
@@ -2316,10 +3229,21 @@
     function selectCollection(c) {
       selectedCid = c.id;
       localStorage.setItem(cidStore, selectedCid);
+      knowledgeSelection = { type: "section", sectionId: c.id };
+      try { localStorage.setItem(knowledgeSelStore, JSON.stringify(knowledgeSelection)); } catch (e) { /* */ }
       $("selName").textContent = c.name;
       $("selId").textContent = c.id;
-      $("colPanel").classList.remove("hidden");
+      if ($("colPanel")) $("colPanel").classList.remove("hidden");
+      if ($("docsNoSelection")) $("docsNoSelection").classList.add("hidden");
+      if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
+      if ($("newColParentId")) $("newColParentId").value = c.id;
+      if ($("newColParentHint")) {
+        $("newColParentHint").style.display = "block";
+        $("newColParentHint").textContent = "Новый подраздел по умолчанию внутри: " + c.name + " (очистите поле ID для корня).";
+      }
+      fillSectionChildrenFromTree(c.id);
       loadDocs();
+      markTreeActive();
     }
 
     async function loadCollections() {
@@ -2347,13 +3271,15 @@
         buildRagScopeUi();
         loadTestScopeFromStorage();
         buildTestScopeUi();
+        await loadKnowledgeTree();
+        await loadKnowledgeStats();
         const saved = localStorage.getItem(cidStore);
         if (saved && collections.some((c) => c.id === saved)) {
           const c = collections.find((x) => x.id === saved);
           if (c) selectCollection(c);
-        } else if (!collections.length) {
+        } else {
           selectedCid = null;
-          $("colPanel").classList.add("hidden");
+          showDocsPlaceholder();
         }
         $("chatNoColHint").classList.toggle("hidden", canUseChatRag());
         await loadThreads();
@@ -2363,13 +3289,15 @@
         buildTestScopeUi();
       }
     }
-    $("btnRefreshCols").onclick = loadCollections;
+    $("btnRefreshCols").onclick = () => { errBox($("colErr"), ""); loadCollections(); };
     $("btnCreateCol").onclick = async () => {
       errBox($("colErr"), "");
       const name = $("newColName").value.trim();
       if (!name) return;
+      const p = $("newColParentId") && $("newColParentId").value.trim();
+      const body = { name: name, parent_id: p || null };
       try {
-        const r = await fetch(apiPath("/v1/collections"), { method: "POST", headers: headers(true), body: JSON.stringify({ name }) });
+        const r = await fetch(apiPath("/v1/collections"), { method: "POST", headers: headers(true), body: JSON.stringify(body) });
         if (!r.ok) throw new Error(await r.text());
         $("newColName").value = "";
         await loadCollections();
@@ -2385,6 +3313,7 @@
         const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const rows = await r.json();
+        const secNode = findSectionNode(selectedCid);
         for (const d of rows) {
           const tr = document.createElement("tr");
           const did = d.id;
@@ -2392,14 +3321,35 @@
           const sz = d.size_bytes != null ? String(d.size_bytes) : "—";
           const tSize = document.createElement("td"); tSize.textContent = sz;
           const t1 = document.createElement("td");
+          const openB = document.createElement("button");
+          openB.className = "btn secondary";
+          openB.type = "button";
+          openB.textContent = "Открыть";
+          openB.style.fontSize = "0.75rem";
+          openB.style.marginRight = "0.35rem";
+          openB.onclick = () => {
+            const pn = secNode || { id: selectedCid, name: $("selName") ? $("selName").textContent : "" };
+            openDocumentDetail(
+              { id: did, name: String(d.filename || did), size_bytes: d.size_bytes, mime: d.mime, created_at: d.created_at },
+              pn
+            );
+            setView("docs");
+          };
           const del = document.createElement("button"); del.className = "btn danger"; del.textContent = "Удалить";
           del.onclick = async () => {
             try {
               const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents/" + encodeURIComponent(did)), { method: "DELETE", headers: headers(false) });
               if (!rr.ok) throw new Error(await rr.text());
-              loadDocs();
+              if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === did) {
+                const pn = secNode || { id: selectedCid, name: $("selName").textContent };
+                openSectionInMain(pn);
+              }
+              await loadDocs();
+              await loadKnowledgeTree();
+              await loadKnowledgeStats();
             } catch (e) { errBox($("docErr"), String(e)); }
           };
+          t1.appendChild(openB);
           t1.appendChild(del);
           tr.appendChild(t0); tr.appendChild(tSize); tr.appendChild(t1);
           tb.appendChild(tr);
@@ -2407,18 +3357,36 @@
       } catch (e) { errBox($("docErr"), String(e)); }
     }
 
+    function setUploadLoading(on) {
+      const st = $("uploadStatus");
+      const btn = $("btnUpload");
+      if (st) {
+        st.classList.toggle("hidden", !on);
+        st.setAttribute("aria-busy", on ? "true" : "false");
+      }
+      if (btn) btn.disabled = !!on;
+    }
     $("btnUpload").onclick = async () => {
       errBox($("docErr"), "");
-      const f = $("fileIn").files[0];
+      const fin = $("fileIn");
+      const f = fin && fin.files[0];
       if (!f || !selectedCid) return;
+      setUploadLoading(true);
       const fd = new FormData();
       fd.append("file", f);
       const kh = headers(false);
       try {
         const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { method: "POST", headers: { ...kh }, body: fd });
         if (!r.ok) throw new Error(await r.text());
-        loadDocs();
-      } catch (e) { errBox($("docErr"), String(e)); }
+        if (fin) fin.value = "";
+        await loadDocs();
+        await loadKnowledgeTree();
+        await loadKnowledgeStats();
+      } catch (e) {
+        errBox($("docErr"), String(e));
+      } finally {
+        setUploadLoading(false);
+      }
     };
 
     const dz = $("dropZone");
@@ -2434,7 +3402,8 @@
     });
 
     $("btnDelCol").onclick = async () => {
-      if (!selectedCid || !confirm("Удалить раздел и индекс?")) return;
+      if (!selectedCid) return;
+      if (!window.confirm("Удалить раздел и все вложенные подразделы, документы и индекс Chroma?")) return;
       errBox($("colErr"), "");
       const gone = selectedCid;
       try {
@@ -2444,10 +3413,34 @@
         selectedCid = null;
         activeThreadId = null;
         localStorage.removeItem(threadStore);
-        $("colPanel").classList.add("hidden");
+        if ($("colPanel")) $("colPanel").classList.add("hidden");
+        showDocsPlaceholder();
         await loadCollections();
       } catch (e) { errBox($("colErr"), String(e)); }
     };
+    if ($("btnEditSection")) {
+      $("btnEditSection").onclick = () => {
+        if (!selectedCid) return;
+        const node = findSectionNode(selectedCid);
+        if (node) editSectionDialog(node);
+      };
+    }
+    if ($("btnEditDoc")) {
+      $("btnEditDoc").onclick = () => {
+        if (!currentDocDetail || !knowledgeSelection || knowledgeSelection.type !== "document") return;
+        const pn = findSectionNode(knowledgeSelection.sectionId);
+        if (!pn) return;
+        renameDocumentFlow(pn, { id: knowledgeSelection.documentId, name: currentDocDetail.name || $("docDetailTitle").textContent });
+      };
+    }
+    if ($("btnDelDocFromDetail")) {
+      $("btnDelDocFromDetail").onclick = () => {
+        if (!knowledgeSelection || knowledgeSelection.type !== "document") return;
+        const pn = findSectionNode(knowledgeSelection.sectionId);
+        if (!pn) return;
+        deleteDocumentFlow(pn, { id: knowledgeSelection.documentId, name: currentDocDetail ? currentDocDetail.name : "" });
+      };
+    }
 
     function formatHttpErrorBody(t) {
       let errText = t;
@@ -2723,6 +3716,8 @@
 
     setView("chat");
     loadHealth();
+    initKbTreeDnD();
+    initKbTreeLabelTitles();
     loadCollections();
     loadTestProfiles();
     loadMainChatProfileUi();

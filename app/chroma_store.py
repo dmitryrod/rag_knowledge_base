@@ -60,6 +60,77 @@ class ChromaStore:
             col.delete(ids=ids)
         return len(ids)
 
+    def count_chunks_for_document(self, collection_id: str, document_id: str) -> int:
+        col = self._get(collection_id)
+        got = col.get(where={"document_id": document_id})
+        return len(got.get("ids") or [])
+
+    def count_embeddings(self, collection_id: str) -> int:
+        """Число записей (чанков) в Chroma-коллекции раздела."""
+        try:
+            col = self._get(collection_id)
+            return int(col.count())
+        except Exception:
+            return 0
+
+    def total_embeddings_for_collection_ids(self, collection_ids: list[str]) -> int:
+        total = 0
+        for cid in collection_ids:
+            total += self.count_embeddings(cid)
+        return total
+
+    def copy_document_vectors_to_collection(
+        self, source_collection_id: str, target_collection_id: str, document_id: str
+    ) -> int:
+        """Копирует чанки документа из source Chroma в target (source не трогает).
+
+        При `source == target` — 0, без I/O. Вызывать до обновления SQLite; после успешного
+        UPDATE удалить векторы из source через `delete_by_document`.
+        """
+        if source_collection_id == target_collection_id:
+            return 0
+        col_src = self._get(source_collection_id)
+        got = col_src.get(
+            where={"document_id": document_id},
+            include=["documents", "metadatas"],
+        )
+        ids = list(got.get("ids") or [])
+        if not ids:
+            return 0
+        docs = got.get("documents") or []
+        metas = got.get("metadatas") or []
+        dlist: list[str] = []
+        mlist: list[dict[str, Any]] = []
+        for i, _cid in enumerate(ids):
+            d = docs[i] if i < len(docs) and docs[i] is not None else ""
+            dlist.append(d if isinstance(d, str) else str(d))
+            md: dict[str, Any] = metas[i] if i < len(metas) and metas[i] is not None else {}
+            if not isinstance(md, dict):
+                md = {}
+            mlist.append(md)
+        col_tgt = self._get(target_collection_id)
+        col_tgt.add(ids=ids, documents=dlist, metadatas=mlist)
+        return len(ids)
+
+    def update_document_filename_metadata(
+        self, collection_id: str, doc_id: str, filename: str
+    ) -> int:
+        """Обновить `filename` в метаданных всех чанков документа. Возвращает число чанков."""
+        col = self._get(collection_id)
+        got = col.get(where={"document_id": doc_id})
+        ids = list(got.get("ids") or [])
+        metas = got.get("metadatas") or []
+        if not ids:
+            return 0
+        new_metas: list[dict[str, Any]] = []
+        for m in metas:
+            md = dict(m) if m else {}
+            md["filename"] = filename
+            md["document_id"] = doc_id
+            new_metas.append(md)
+        col.update(ids=ids, metadatas=new_metas)
+        return len(ids)
+
     def query(
         self,
         collection_id: str,
