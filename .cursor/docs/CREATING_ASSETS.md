@@ -85,6 +85,21 @@
 2. В новых командах и skills — везде **`Task`**, не синонимы.
 3. В [`rules/README.md`](../rules/README.md) при добавлении правила про workflow — ссылка на этот раздел (`#task-delegation`) или на [`workflow-selection.mdc`](../rules/workflow-selection.mdc).
 
+<a id="local-hygiene"></a>
+
+### Local hygiene (сессии, кэш, «чужие» машины)
+
+Сборка в `.cursor/agents/`, `.cursor/skills/`, `.cursor/rules/`, `.cursor/commands/`, `.cursor/docs/`, [`.cursor/config.json`](../config.json) **коммитится** как код. Сессии метрик, RAG, временные фейлы **не** несут ценности для истории репо — их держат локально, часть **в `.gitignore`**.
+
+**Скрипт:** [`.cursor/scripts/sanitize-cursor.mjs`](../scripts/sanitize-cursor.mjs) — удаляет только явный список артефактов: `session-*.json`, `METRICS_SUMMARY.md`, `active_memory.md`, индексы RAG, `mcp*.local.json`, временные `gh-*.txt`, содержимое **generated** `presentations` output (`.cursor/presentations/dist/*`, кроме `.gitkeep`), кэш `.cursor/.cache/`, `__pycache__` под scripts (и шире при `--all`).
+
+- **Сухой прогон:** `node .cursor/scripts/sanitize-cursor.mjs --dry-run` — таблица «путь | действие | причина».
+- **CI / неинтерактив:** без TTY к деструктивным операциям нужен **`--force`** (иначе exit с ошибкой).
+- **`--soft`:** только минимальный список; **`--all`:** агрессивнее (лишние файлы в `.cursor/reports/`, `__pycache__` рекурсивно под `.cursor/`), **не** совместим с `--soft`.
+- **Про идентичность проекта (marketing):** флаг `--strip-project-identity` — бэкап `marketing-context.md` и удаление **или** замена из [`.cursor/marketing-context.example.md`](../marketing-context.example.md) вместе с `--replace-with-example`. Шаблоны `*.example.md` **никогда** не удаляет.
+
+**Команда Cursor:** [`cursor-sanitize`](../commands/cursor-sanitize.md). Триггеры в [`agent-intent-map.csv`](agent-intent-map.csv) — строка `cursor_hygiene`.
+
 ---
 
 <a id="agent-intent-map"></a>
@@ -128,7 +143,7 @@
 - Явная пользовательская команда **`/workflow-scaffold`**, **`/workflow-implement`**, **`/workflow-feature`**, **`/norissk`** переопределяет эвристику по глаголам.
 - Для marketing deliverables строки `marketing_tactical` / `marketing_research` могут **переопределять** generic `creation_simple` / `creation_complex`, даже если запрос содержит слова «напиши», «создай» или «сделай».
 - **Команда `/norissk` + слова-триггеры** из CSV: исполняющий агент **обязан** пройти **согласованную** цепочку вызовов **`Task`** для выбранного workflow (не подменять роли субагентов самостоятельно). Детали и исключения: [`norissk.md` § trigger-delegation](../commands/norissk.md#trigger-delegation).
-- **Marp-презентации** (Markdown → pptx/pdf/html): скилл **`marp-slide`**; пути **`presentations.source`** и **`presentations.output`** в [`.cursor/config.json`](../config.json) (`presentations`); сборка — **`@marp-team/marp-cli`** только если в корне проекта есть `package.json` с соответствующим script/dependency. Субагент **`designer`**. **Google Stitch** (скилл **`stitch-mcp`**) — для токенов/описания темы в MCP-ответах; **не** как источник готовых картинок по URL (скриншоты/SVG из Stitch для репо ненадёжны — см. **`stitch-mcp`**). Детали строки `design_deck` в CSV.
+- **Marp-презентации** (Markdown → pptx/pdf/html): скилл **`marp-slide`**; пути **`presentations.source`** и **`presentations.output`** в [`.cursor/config.json`](../config.json) (`.cursor/presentations` и `.cursor/presentations/dist`); сборка — **`@marp-team/marp-cli`** только если в корне проекта есть `package.json` с соответствующим script/dependency. Субагент **`designer`**. **Google Stitch** (скилл **`stitch-mcp`**) — для токенов/описания темы в MCP-ответах; **не** как источник готовых картинок по URL (скриншоты/SVG из Stitch для репо ненадёжны — см. **`stitch-mcp`**). Детали строки `design_deck` в CSV.
 
 <a id="stitch-designer-canonical"></a>
 
@@ -146,7 +161,7 @@
 
 **Внешние ориентиры** (паттерны, не зависимости): `design-md` (DESIGN.md как человекочитаемый source of truth после извлечения из Stitch), `enhance-prompt` (структурированный промпт с design-context и role-based mapping), `stitch-loop` (раздельное хранение raw snapshot / canonical doc / metadata). Ссылки: [design-md](https://skills.sh/google-labs-code/stitch-skills/design-md), [enhance-prompt](https://skills.sh/google-labs-code/stitch-skills/enhance-prompt), [stitch-loop](https://skills.sh/google-labs-code/stitch-skills/stitch-loop).
 
-**Polza (изображения для Marp):** только выборочно, локальные файлы под **`presentations/`**, не подменяют фактические графики. План токенов/слайдов — [`designer`](../agents/designer.md); **вызов API и запись файлов** — агент [`imager`](../agents/imager.md) и скрипт `presentations/scripts/polza_marp_images.py` (см. также скилл [`ai-image-generation`](../skills/ai-image-generation/SKILL.md); внешний ориентир по практикам: [tool-belt/ai-image-generation](https://skills.sh/tool-belt/skills/ai-image-generation)). Якорь: `#stitch-designer-canonical`.
+**Polza (изображения для Marp):** только выборочно, локальные файлы под **`.cursor/presentations/`**, не подменяют фактические графики. План токенов/слайдов — [`designer`](../agents/designer.md); **вызов API и запись файлов** — агент [`imager`](../agents/imager.md) и скрипт `.cursor/presentations/scripts/polza_marp_images.py` (см. также скилл [`ai-image-generation`](../skills/ai-image-generation/SKILL.md); внешний ориентир по практикам: [tool-belt/ai-image-generation](https://skills.sh/tool-belt/skills/ai-image-generation)). Якорь: `#stitch-designer-canonical`.
 
 <a id="ecosystem-integrator"></a>
 
@@ -229,6 +244,7 @@ Before performing tasks:
 - [`researcher.md`](../agents/researcher.md) — исследование подходов до реализации; скилл [`firecrawl-mcp`](../skills/firecrawl-mcp/SKILL.md) для веб-источников (MCP `user-firecrawl-mcp`)
 - [`marketing.md`](../agents/marketing.md) — тактический маркетинг (копирайт, CRO, SEO-кусок и т.д.); skills: [`marketing-context`](../skills/marketing-context/SKILL.md), [`marketing-router`](../skills/marketing-router/SKILL.md)
 - [`marketing-researcher.md`](../agents/marketing-researcher.md) — полный marketing research / GTM roadmap; skills: [`marketing-context`](../skills/marketing-context/SKILL.md), [`marketing-research-playbook`](../skills/marketing-research-playbook/SKILL.md), [`marketing-router`](../skills/marketing-router/SKILL.md)
+- [`prompt-enhancer.md`](../agents/prompt-enhancer.md) — усиление сырого запроса в исполнимый Cursor-промпт под эту `.cursor/`-сборку (advisory-only); skills: [`prompt-enhancer`](../skills/prompt-enhancer/SKILL.md), [`workflow-selector`](../skills/workflow-selector/SKILL.md)
 
 ---
 
@@ -264,6 +280,12 @@ description: What this skill provides. Use when doing X.
 - [`marketing-context`](../skills/marketing-context/SKILL.md) — единый продуктовый маркетинговый контекст (файл `.cursor/marketing-context.md`)
 - [`marketing-router`](../skills/marketing-router/SKILL.md) — маршрутизация запроса к 1–3 leaf marketing skills
 - [`marketing-research-playbook`](../skills/marketing-research-playbook/SKILL.md) — пошаговый playbook для агента `marketing-researcher`
+- [`agent-creator`](../skills/agent-creator/SKILL.md) — авторинг `.cursor/agents/*.md` (handoff, `Task`-канон)
+- [`agent-skill-creator`](../skills/agent-skill-creator/SKILL.md) — авторинг `.cursor/skills/*/SKILL.md` (внешние пакеты — через `ecosystem-integrator`)
+- [`md-design-system`](../skills/md-design-system/SKILL.md) — нормализация Markdown без смены фактов
+- [`md-compressor`](../skills/md-compressor/SKILL.md) — opt-in сжатие verbose Markdown (не для CSV/канона без review)
+- [`capability-architecture`](../skills/capability-architecture/SKILL.md) — capabilities, границы, контракты (в паре с `architecture-principles` при review кода)
+- [`prompt-enhancer`](../skills/prompt-enhancer/SKILL.md) — сырой запрос → исполнимый Cursor-промпт (Task, scope, Done when); в паре с агентом `prompt-enhancer`, строка `prompt_enhancement` в `agent-intent-map.csv`
 - Остальные leaf skills: см. [`MARKETING_SKILLS_UPSTREAM.md`](MARKETING_SKILLS_UPSTREAM.md)
 
 ---
@@ -285,6 +307,13 @@ description: What this skill provides. Use when doing X.
 - [`workflow-feature`](../commands/workflow-feature.md) — полный (planner + designer/worker/refactor по плану + остальные субагенты)
 - [`workflow-integrate-skill`](../commands/workflow-integrate-skill.md) — интеграция внешнего скилла / best practices в `.cursor/` с адаптацией и обновлением CSV/доков (см. [§ ecosystem-integrator](#ecosystem-integrator))
 - [`norissk`](../commands/norissk.md) — авто-выбор workflow
+- [`cursor-sanitize`](../commands/cursor-sanitize.md) — локальная гигиена `.cursor/` (см. [§ local-hygiene](#local-hygiene))
+- [`create-issue`](../commands/create-issue.md) — черновик GitHub issue
+- [`fix-issue`](../commands/fix-issue.md) — исправление по issue
+- [`metrics-report`](../commands/metrics-report.md) — отчёт метрик сессий
+- [`pr`](../commands/pr.md) — создание PR
+- [`review`](../commands/review.md) — запуск ревью-цепочки
+- [`update-deps`](../commands/update-deps.md) — обновление зависимостей
 
 ---
 

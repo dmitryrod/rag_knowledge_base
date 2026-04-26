@@ -11,7 +11,7 @@ description: Google Stitch MCP (UI screens, design systems). Use when generating
 
 - Stitch отдаёт **сырьё** для дизайна: `theme`, `designMd`, `htmlCode`, метаданные проекта/экранов, подсказки композиции.
 - Ответы Stitch **не** считаются финальным каноническим артефактом репозитория для Marp или UI.
-- Канонический спек формирует агент **`designer`**: **`DESIGN_TOKENS.md`** и при необходимости расширенный **`*.tokens.json`** (см. `presentations/DESIGN_TOKENS.md`, [`.cursor/agents/designer.md`](../../agents/designer.md)).
+- Канонический спек формирует агент **`designer`**: **`DESIGN_TOKENS.md`** и при необходимости расширенный **`*.tokens.json`** (см. [`.cursor/presentations/DESIGN_TOKENS.md`](../../presentations/DESIGN_TOKENS.md), [`.cursor/agents/designer.md`](../../agents/designer.md)).
 - Сырой снимок MCP сохраняй как **`*-raw.tokens.json`** или фрагмент JSON без сильной нормализации — см. [`.cursor/docs/CREATING_ASSETS.md` § Stitch → snapshot](../../docs/CREATING_ASSETS.md#stitch-designer-canonical).
 
 ## Когда вызывать
@@ -55,7 +55,7 @@ description: Google Stitch MCP (UI screens, design systems). Use when generating
 ## Ограничения
 
 - Долгие операции: не считать зависанием; не делать параллельных дублей одной генерации.
-- Итог для репозитория: по возможности дублировать ключевые токены/описание в markdown в `presentations/` или `app/docs/`, чтобы не зависеть только от облака Stitch.
+- Итог для репозитория: по возможности дублировать ключевые токены/описание в markdown в `.cursor/presentations/` или `app/docs/`, чтобы не зависеть только от облака Stitch.
 - Ошибки квоты/ключа — зафиксировать в ответе пользователю, перейти на спеки без MCP.
 
 ### Экспорт картинок / SVG / скриншоты (ненадёжно)
@@ -73,5 +73,5 @@ description: Google Stitch MCP (UI screens, design systems). Use when generating
 
 **Что делать для картинок в слайдах:**
 
-- **Локальные** PNG/SVG (`presentations/assets/`), matplotlib/plotly (`chart_from_csv.py`); Stitch **не** как источник бинарных картинок по URL.
+- **Локальные** PNG/SVG (`.cursor/presentations/assets/`), matplotlib/plotly (`chart_from_csv.py`); Stitch **не** как источник бинарных картинок по URL.
 - Если нужна иллюстрация «как на экране» без HTML — описать словами или собрать макет локально.

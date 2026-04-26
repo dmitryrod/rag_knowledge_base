@@ -11,13 +11,13 @@ alwaysApply: true
 2. Выбери соответствующий workflow
 3. Выполни шаги выбранного workflow (вызывай субагентов по порядку)
 
-**Делегирование только через встроенный инструмент Cursor `Task`** (параметры: `subagent_type`, `prompt`, `description`, при необходимости `model`, `readonly`, `run_in_background`). Это **не** MCP-сервер из настроек MCP и не инструмент из папки `mcps/` — отдельные субагенты и отдельный контекст появляются **только** если модель **реально вызывает `Task`**, а не пересказывает роли worker/reviewer в одном ответе.
+**Делегирование только через встроенный инструмент Cursor `Task`** (параметры: `subagent_type`, `prompt`, `description`, при необходимости `model`, `readonly`, `run_in_background`). Это **не** MCP-сервер из настроек MCP и не инструмент из папки `mcps/` — отдельные субагенты и отдельный контекст появляются **только** если модель **реально вызывает `Task`**, а не пересказывает роли worker/reviewer-senior в одном ответе.
 
 **Если в сессии нет инструмента `Task`** (например режим Ask, сборка без субагентов, отключённые агентные инструменты) — цепочки из `/norissk` и workflow-команд **не смогут** породить отдельные окна субагентов; кратко опиши пользователю это ограничение. Подробнее: [`.cursor/docs/CREATING_ASSETS.md` § почему Task не вызывается](../docs/CREATING_ASSETS.md#why-task-not-called).
 
 При срабатывании **триггеров** из карты формулировок строй **минимально достаточную** цепочку `Task` по [§ trigger-routing](../docs/CREATING_ASSETS.md#trigger-routing), а не все роли подряд без смысла.
 
-**Никогда не выполняй роли planner, worker, designer, imager, debugger, test-runner, reviewer, documenter, security-auditor, senior-reviewer, marketing, marketing-researcher самостоятельно** — только через `Task`. Запрещённые имена и историческая путаница с MCP — только в [`CREATING_ASSETS.md` → «Инструмент Task»](../docs/CREATING_ASSETS.md#task-delegation).
+**Никогда не выполняй роли planner, worker, designer, imager, debugger, test-runner, reviewer-senior, refactor, documenter, security-auditor, marketing, marketing-researcher, researcher самостоятельно** — только через `Task` с тем же `subagent_type`, что в [`.cursor/agents/`](../agents/) (для ревью кода — **`reviewer-senior`**, не устаревшее имя `reviewer` / `senior-reviewer`). Запрещённые имена инструментов и историческая путаница с MCP — только в [`CREATING_ASSETS.md` → «Инструмент Task»](../docs/CREATING_ASSETS.md#task-delegation).
 
 Если пользователь явно указал команду (`/workflow-scaffold`, `/workflow-implement`, `/workflow-feature`, `/workflow-integrate-skill`, `/norissk`) — следуй ей. Иначе — примени workflow-selector и выбери сам.
 

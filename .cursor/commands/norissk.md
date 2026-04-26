@@ -34,6 +34,7 @@
 | копирайт, лендинг, CTA, рекламный текст, email, соцпост, CRO, SEO правки страницы | copy, landing page, CTA, ad copy, email, social post, page CRO, SEO copy | **по контексту** с первичным агентом **`marketing`** |
 | маркетинговое исследование, GTM, позиционирование, запуск продукта, маркетинг под ключ, ICP | marketing research, GTM, positioning, product launch, full marketing plan, ICP | **по контексту** с первичным агентом **`marketing-researcher`** |
 | оформи, макет слайдов, deck, tokens, mockup | design, layout, deck, slides | **designer** первым; часто **scaffold** (ветка дизайн-only) |
+| очисти .cursor, санитаризация, кэш сессий, reset cursor local | clean .cursor, sanitize, session cache, reset cursor local state | **scaffold**; первичный агент **`worker`** (запуск [`sanitize-cursor.mjs`](../scripts/sanitize-cursor.mjs) — см. [`cursor-sanitize.md`](cursor-sanitize.md) и [§ local-hygiene](../docs/CREATING_ASSETS.md#local-hygiene)) |
 
 Полная карта сценариев: [`agent-intent-map.csv`](../docs/agent-intent-map.csv). Контекст и правила обновления: [`CREATING_ASSETS.md` — Карта формулировок](../docs/CREATING_ASSETS.md#agent-intent-map).
 

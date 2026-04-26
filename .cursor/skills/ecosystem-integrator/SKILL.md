@@ -44,7 +44,7 @@ description: >-
 
 5. **MCP**  
    - Никогда не подставлять секреты в репозиторий.  
-   - Если скилл требует MCP: добавить **пример** в `.cursor/mcp.<name>.example.json` (как существующие [`mcp.github.example.json`](../../mcp.github.example.json), [`mcp.figma.example.json`](../../mcp.figma.example.json)) и инструкцию пользователю вручную внести сервер в настройки Cursor.  
+   - Если скилл требует MCP: добавить **пример** в `.cursor/mcp.<name>.example.json` (как существующие [`mcp.github.example.json`](../../mcp.github.example.json), [`mcp.figma.example.json`](../../mcp.figma.example.json), [`mcp.docker.example.json`](../../mcp.docker.example.json)) и инструкцию пользователю вручную внести сервер в настройки Cursor.  
    - Не создавать боевой `mcp.json` с токенами в git.
 
 6. **Документирование (documenter) — обязательный финал**  

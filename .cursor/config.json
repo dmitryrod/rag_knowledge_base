@@ -46,9 +46,9 @@
     "comment": "Session reports сохраняются в .cursor/reports/session-*.json. Скрипт: node .cursor/scripts/metrics-report.js"
   },
   "presentations": {
-    "source": "presentations",
-    "output": "presentations/dist",
-    "comment": "Marp: .md и ассеты в source; pptx/pdf/html из marp CLI — в output (каталог в .gitignore через **/dist/). Если презентационный pipeline ещё не используется, допустимы placeholder-каталоги presentations/ и presentations/dist."
+    "source": ".cursor/presentations",
+    "output": ".cursor/presentations/dist",
+    "comment": "Marp: .md и ассеты в source; pptx/pdf/html из marp CLI — в output (каталог в .gitignore через **/dist/). Канонический презентационный pipeline хранится внутри .cursor/presentations."
   },
   "polza": {
     "apiKeyEnv": "POLZA_API_KEY",
@@ -56,6 +56,6 @@
     "baseUrlEnv": "POLZA_BASE_URL",
     "baseUrlDefault": "https://polza.ai/api/v1",
     "modelEnv": "POLZA_MODEL",
-    "comment": "Ключ и модель Polza — только через переменные окружения / app/.env (имена выше), не коммитить секреты."
+    "comment": "Ключ и модель Polza — только через переменные окружения / .env (имена выше), не коммитить секреты."
   }
 }

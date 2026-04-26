@@ -16,7 +16,7 @@ Before performing tasks:
 ## When invoked
 
 1. Understand the task or subtask assigned to you (check for a plan ID and Next Prompt)
-2. Find relevant files in `app/` — read existing patterns before writing new code
+2. Find relevant files — read existing patterns before writing new code
 3. Implement changes — minimal and focused, preserving project conventions
 4. Follow existing code style: async/await, SQLAlchemy ORM, Google-style docstrings
 5. Write or update tests in `app/tests/` for new public functions
@@ -32,6 +32,13 @@ Before performing tasks:
 - Deep-dive into security analysis — delegate to security-auditor
 - Skip writing tests for new public functions/endpoints
 - Hard-code values — use config, env variables, or existing constants
+
+## Completion and handoff
+
+- **DoD:** Изменения по задаче/ID плана выполнены; новые публичные API покрыты тестами; стиль проекта соблюдён.
+- **Stop:** После коммитопригодного набора правок по скоупу; без лишнего рефактора вне задачи.
+- **Пакет для следующего `Task` (часто `test-runner`):** список изменённых путей, команда тестов из `.cursor/config.json` → `testing`, известные риски, что не трогалось намеренно.
+- **Старт `test-runner`:** Запуск только после того, как код по задаче зафиксирован; при падениях — эскалация к `debugger` по workflow.
 
 ## Quality Checklist
 - [ ] Existing `app/` patterns examined before implementing?

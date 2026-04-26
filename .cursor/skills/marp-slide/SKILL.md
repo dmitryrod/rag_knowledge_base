@@ -19,13 +19,13 @@ Use this skill when the user:
 ## Project paths and orchestration
 
 - **Canonical paths** live in [`.cursor/config.json`](../../config.json) under `presentations`:
-  - `source` — Marp `.md` files and slide assets (e.g. `presentations/images/`, `presentations/assets/`).
-  - `output` — generated **pptx**, **pdf**, **html** from Marp CLI (default: `presentations/dist/`; usually gitignored).
-- **`DESIGN_TOKENS.md` + extended tokens:** для тематических deck’ов стиль Marp и согласованность с UI берут из **`presentations/DESIGN_TOKENS.md`** (и при наличии **`*-extended.tokens.json`**) — не только из сырого Stitch JSON. Шаблон контракта: [`presentations/DESIGN_TOKENS.md`](../../../presentations/DESIGN_TOKENS.md). Правило потока: [`.cursor/docs/CREATING_ASSETS.md` § Stitch/designer](../../docs/CREATING_ASSETS.md#stitch-designer-canonical).
+  - `source` — Marp `.md` files and slide assets (e.g. `.cursor/presentations/images/`, `.cursor/presentations/assets/`).
+  - `output` — generated **pptx**, **pdf**, **html** from Marp CLI (default: `.cursor/presentations/dist/`; usually gitignored).
+- **`DESIGN_TOKENS.md` + extended tokens:** для тематических deck’ов стиль Marp и согласованность с UI берут из **`.cursor/presentations/DESIGN_TOKENS.md`** (и при наличии **`*-extended.tokens.json`**) — не только из сырого Stitch JSON. Шаблон контракта: [`.cursor/presentations/DESIGN_TOKENS.md`](../../presentations/DESIGN_TOKENS.md). Правило потока: [`.cursor/docs/CREATING_ASSETS.md` § Stitch/designer](../../docs/CREATING_ASSETS.md#stitch-designer-canonical).
 - **Subagents** are invoked only via Cursor **`Task(subagent_type="designer", ...)`** — not via MCP. This skill is used by the **designer** agent when building decks.
 - **Workflows:** `/norissk` or `/workflow-scaffold` / `/workflow-implement` — for design-only slides use **designer** → (optional) **documenter** if `app/docs/` must be updated. See [`workflow-selection.mdc`](../../rules/workflow-selection.mdc) and [`CREATING_ASSETS.md`](../../docs/CREATING_ASSETS.md#agent-intent-map).
 - **Google Stitch:** not a separate subagent. The **designer** may use Stitch MCP for **raw** tokens / theme / `designMd` / **HTML as reference** — then **normalize** into `DESIGN_TOKENS.md`. Stitch output is **not** the repo canonical spec by itself (see [`stitch-mcp/SKILL.md`](../stitch-mcp/SKILL.md)). **Не** использовать скачивание **скриншотов** / битого SVG с URL для слайдов — см. «Экспорт картинок» в [`stitch-mcp/SKILL.md`](../stitch-mcp/SKILL.md).
-- **Polza / AI images:** разрешены только для **narrative / cover / metaphor / section** слайдов; **запрещены** для точных data charts и слайдов, где смысл несёт таблица/график. **Не более 30%** слайдов в deck с AI-картинками; **не более 2** таких слайдов подряд. Картинки только как **локальные файлы** под `presentations/` (например `assets/generated/`). Промпты согласовать с фоном и палитрой из **`DESIGN_TOKENS.md`**; в промпте явно указывать **предметную метафору** (экономика → графики/терминал/валюта, а не generic abstract). Генерацию файлов и HTTP к Polza выполняет агент **`imager`** ([`.cursor/agents/imager.md`](../../agents/imager.md)); скрипт: [`presentations/scripts/polza_marp_images.py`](../../../presentations/scripts/polza_marp_images.py), скилл: [`ai-image-generation`](../ai-image-generation/SKILL.md).
+- **Polza / AI images:** разрешены только для **narrative / cover / metaphor / section** слайдов; **запрещены** для точных data charts и слайдов, где смысл несёт таблица/график. **Не более 30%** слайдов в deck с AI-картинками; **не более 2** таких слайдов подряд. Картинки только как **локальные файлы** под `.cursor/presentations/` (например `assets/generated/`). Промпты согласовать с фоном и палитрой из **`DESIGN_TOKENS.md`**; в промпте явно указывать **предметную метафору** (экономика → графики/терминал/валюта, а не generic abstract). Генерацию файлов и HTTP к Polza выполняет агент **`imager`** ([`.cursor/agents/imager.md`](../../agents/imager.md)); скрипт: [`.cursor/presentations/scripts/polza_marp_images.py`](../../presentations/scripts/polza_marp_images.py), скилл: [`ai-image-generation`](../ai-image-generation/SKILL.md).
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ For detailed theme selection guidance, read `references/theme-selection.md`.
 
 5. Add images if needed using patterns from `references/image-patterns.md`
 
-6. Save the Markdown deck under **`presentations.source`** from config (e.g. `presentations/my-deck.md`) with `.md` extension
+6. Save the Markdown deck under **`presentations.source`** from config (e.g. `.cursor/presentations/my-deck.md`) with `.md` extension
 
 ## Available Themes
 
@@ -157,10 +157,10 @@ For detailed theme selection guidance, read `references/theme-selection.md`.
    - **Numeric series / точные ряды:** готовь **CSV** с заголовком (две числовые колонки, например `year`, `gdp_growth_pct`), затем скрипт в репозитории строит **PNG**:
      - Зависимости: `uv sync --extra presentations` в каталоге `app/` (ставит `matplotlib`).
      - Из **корня репозитория**:  
-       `uv run python presentations/tools/chart_from_csv.py presentations/sample-data/gdp-demo.csv -o presentations/assets/chart-gdp.png --title "ВВП, % г/г" --dark --kind line`
-     - Модуль: [`presentations/chart_from_csv.py`](../../../presentations/chart_from_csv.py) (`--backend matplotlib` по умолчанию; `--backend plotly` — опционально, extras `presentations-plotly` и **kaleido** для экспорта PNG).
+      `uv run python .cursor/presentations/tools/chart_from_csv.py .cursor/presentations/sample-data/gdp-demo.csv -o .cursor/presentations/assets/chart-gdp.png --title "ВВП, % г/г" --dark --kind line`
+     - Модуль: [`.cursor/presentations/chart_from_csv.py`](../../presentations/chart_from_csv.py) (`--backend matplotlib` по умолчанию; `--backend plotly` — опционально, extras `presentations-plotly` и **kaleido** для экспорта PNG).
    - В Marp вставь: `![w:700px](assets/chart-gdp.png)` или `![bg right:38%](assets/chart-gdp.png)`.
-   - **Обложки / метафоры / иллюстрации без табличных данных** — не через `chart_from_csv`; внешние генераторы (**Polza AI** и др.) — только **декоративные** локальные PNG, с лимитом **≤30%** слайдов и **не подряд >2**; **никогда** не вместо графиков по фактическим рядам или плотных data/table слайдов. Сборка батча: `uv run python presentations/scripts/polza_marp_images.py --help` (ключ `POLZA_API_KEY` или `POLZA_AI_API_KEY`, опционально `POLZA_BASE_URL`). Палитра/фон — из **`DESIGN_TOKENS.md`**.
+   - **Обложки / метафоры / иллюстрации без табличных данных** — не через `chart_from_csv`; внешние генераторы (**Polza AI** и др.) — только **декоративные** локальные PNG, с лимитом **≤30%** слайдов и **не подряд >2**; **никогда** не вместо графиков по фактическим рядам или плотных data/table слайдов. Сборка батча: `uv run python .cursor/presentations/scripts/polza_marp_images.py --help` (ключ `POLZA_API_KEY` или `POLZA_AI_API_KEY`, опционально `POLZA_BASE_URL`). Палитра/фон — из **`DESIGN_TOKENS.md`**.
 
 7. **Output file**
    - Save under **`presentations.source`** (see `.cursor/config.json` → `presentations.source`)
@@ -174,9 +174,9 @@ From the **repository root**:
 
 ```bash
 # PowerShell / bash — adjust paths to match config
-npx marp --no-stdin presentations/deck.md -o presentations/dist/deck.pptx --pptx
-npx marp --no-stdin presentations/deck.md -o presentations/dist/deck.pdf --pdf
-npx marp --no-stdin presentations/deck.md -o presentations/dist/deck.html --html
+npx marp --no-stdin .cursor/presentations/deck.md -o .cursor/presentations/dist/deck.pptx --pptx
+npx marp --no-stdin .cursor/presentations/deck.md -o .cursor/presentations/dist/deck.pdf --pdf
+npx marp --no-stdin .cursor/presentations/deck.md -o .cursor/presentations/dist/deck.html --html
 ```
 
 On **Windows**, `--no-stdin` avoids Marp waiting for piped input when launched via `npx`. Global `marp` (npm install -g) usually does not need it.
@@ -190,7 +190,7 @@ Optional: `.marprc.yml` in repo root for shared theme paths — see `references/
 
 ### PPTX и тёмная тема (типичные сбои)
 
-- **Таблицы `|...|`:** в экспорте pptx у `td` часто оказывается **белый фон** и светлый текст — в `style:` задайте явно `background-color` и `color` для **`th` и `td`** с `!important` (см. `presentations/russia-economy-2022-2026.md`).
+- **Таблицы `|...|`:** в экспорте pptx у `td` часто оказывается **белый фон** и светлый текст — в `style:` задайте явно `background-color` и `color` для **`th` и `td`** с `!important` (см. `.cursor/presentations/russia-economy-2022-2026.md`).
 - **Fenced code (тройные backticks):** блоки кода часто рендерятся **белым прямоугольником**; для тёмного дека **предпочитайте** обычный markdown (списки, жирный, стрелки) вместо ```…``` или дублируйте тёмный фон в CSS для `pre`/`code` (надёжность в pptx не 100%).
 - **Split `![bg right:…%](chart.png)`:** слишком крупный PNG + широкая колонка → график **обрезается**. Делайте PNG **компактным** в `chart_from_csv` (маленький `figsize`, короткие заголовки), колонку **32–36%**, не 40–45%.
 
@@ -252,7 +252,7 @@ Always save the final Marp **source** (`.md`) under **`presentations.source`** f
 - `seminar-slides.md`
 - `lecture-materials.md`
 
-Put static images next to the deck or under `presentations/assets/` as appropriate.
+Put static images next to the deck or under `.cursor/presentations/assets/` as appropriate.
 
 ## Quality Checklist
 

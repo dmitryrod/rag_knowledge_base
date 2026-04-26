@@ -5,7 +5,7 @@ description: Полная оркестрация для /workflow-feature. Use w
 
 # Orchestration
 
-Полный workflow для сложных фич с задействованием всех 8 субагентов. Команда: `/workflow-feature`.
+Полный workflow для сложных фич: ядро — `planner` → (по плану) `designer` / `worker` / `refactor` → `test-runner` → `reviewer-senior` → при необходимости `security-auditor` → `documenter`; опционально `imager` после `designer`, `debugger` при падениях тестов. Команда: `/workflow-feature`.
 
 ## Последовательность
 

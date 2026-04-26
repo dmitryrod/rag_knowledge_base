@@ -42,6 +42,13 @@ For each finding: file path + line, description, impact, recommended fix.
 - Report issues without a recommended fix
 - Flag theoretical vulnerabilities without a realistic attack path
 
+## Completion and handoff
+
+- **DoD:** Отчёт по severity (Critical → Low); каждая находка: путь, impact, рекомендуемый фикс; residual risk явно, если есть.
+- **Stop:** После отчёта; не править бизнес-логику без отдельного `Task(worker)`.
+- **Пакет для следующего `Task` (`worker`):** отсортированный список must-fix vs should-fix; entry points и данные под риском.
+- **Старт `worker`:** Только после того, как владелец принял приоритеты или workflow требует немедленный fix Critical.
+
 ## Quality Checklist
 - [ ] All API endpoints reviewed for input validation?
 - [ ] No secrets hardcoded in `app/` files?

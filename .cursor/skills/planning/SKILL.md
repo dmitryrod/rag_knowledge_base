@@ -60,7 +60,7 @@ Depends:  <ID других задач, которые должны быть вы
 Проверь: <критерий готовности>.
 
 **Для test-runner (после FEAT-001):**
-Запусти `python -m pytest app/tests/<test_file>.py`.
+Запусти тесты командой из `.cursor/config.json` → `testing.command` (по умолчанию `python -m pytest app/tests/`), при необходимости сузь путь до файла.
 Если падают — исправь, сохраняя намерение теста.
 ```
 

@@ -63,6 +63,13 @@ Before performing tasks:
 - Focus on style in the Senior Review section — that's Level 1 scope
 - Return vague "looks good" without substantiation
 
+## Completion and handoff
+
+- **DoD:** Два блока вывода — Quick Review и Senior Review; замечания с путями и приоритетом; явное «ok to merge» или список must-fix.
+- **Stop:** После выдачи ревью; не вносить сложные правки кода самому (простые точечные — по политике родительского workflow).
+- **Пакет для следующего `Task` (`worker` / `debugger`):** нумерованные findings, ожидаемое поведение после фикса, затронутые файлы.
+- **Старт исполнителя:** Фикс только после принятия приоритетов; повторный `test-runner` / `reviewer-senior` по workflow.
+
 ## Quality Checklist
 - [ ] Linters executed (or noted as unavailable)?
 - [ ] All changed files reviewed?
