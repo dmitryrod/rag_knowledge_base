@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9,6 +9,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
+      --sidebar-w: 260px;
+      --sidebar-min-w: 220px;
+      --sidebar-max-w: 480px;
+      --top-h: 52px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 18px;
+      --ui-ease: 0.18s ease;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
       --surface: #0e0e0e;
       --surface-container: #191a1a;
       --surface-container-high: #1f2020;
@@ -24,21 +35,126 @@
       --primary-container: #454747;
       --ghost-border: rgba(72, 72, 72, 0.35);
       --focus-ring: rgba(198, 198, 199, 0.55);
-      --sidebar-w: 260px;
-      --sidebar-min-w: 220px;
-      --sidebar-max-w: 480px;
-      --top-h: 52px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-      --radius-xl: 18px;
       --err: #ee7d77;
       --error-container: #7f2927;
       --on-error-container: #ff9993;
       --ok: #3fb950;
-      --ui-ease: 0.18s ease;
+      --danger-btn: #7f2927;
+      --danger-btn-on: #ff9993;
+      --danger-btn-hover: #9a3d39;
+      --danger-btn-active: #6d2523;
+      --compare-warn-bg: color-mix(in srgb, #dc8c28 12%, transparent);
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --surface: #f2f1ef;
+      --surface-container: #ffffff;
+      --surface-container-high: #f8f7f6;
+      --surface-container-highest: #ebe9e6;
+      --surface-container-low: #fafaf9;
+      --surface-bright: #e3e1de;
+      --on-surface: #1b1a19;
+      --on-surface-variant: #5f5d5b;
+      --outline-variant: #c3c0bc;
+      --primary: #3a3937;
+      --primary-dim: #4f4d4b;
+      --on-primary: #f7f6f5;
+      --primary-container: #d6d4d1;
+      --ghost-border: rgba(55, 53, 50, 0.12);
+      --focus-ring: rgba(58, 57, 55, 0.35);
+      --err: #b3261e;
+      --error-container: #fce8e6;
+      --on-error-container: #611a16;
+      --ok: #137333;
+      --danger-btn: #b3261e;
+      --danger-btn-on: #ffffff;
+      --danger-btn-hover: #8f1f18;
+      --danger-btn-active: #721814;
+      --compare-warn-bg: color-mix(in srgb, #b06000 10%, transparent);
+    }
+    html[data-theme="blue"] {
+      color-scheme: dark;
+      --surface: #0a0f16;
+      --surface-container: #111a28;
+      --surface-container-high: #152033;
+      --surface-container-highest: #1b2840;
+      --surface-container-low: #0c121c;
+      --surface-bright: #223452;
+      --on-surface: #e8edf7;
+      --on-surface-variant: #9aa8c4;
+      --outline-variant: #3d4f6f;
+      --primary: #8fb4ff;
+      --primary-dim: #a8c2ff;
+      --on-primary: #0a1628;
+      --primary-container: #2a3f66;
+      --ghost-border: rgba(100, 140, 200, 0.22);
+      --focus-ring: rgba(143, 180, 255, 0.5);
+      --err: #ff8a80;
+      --error-container: #7f2e2a;
+      --on-error-container: #ffc8c4;
+      --ok: #6fdc8c;
+      --danger-btn: #7f2e2a;
+      --danger-btn-on: #ffc8c4;
+      --danger-btn-hover: #9a3f3a;
+      --danger-btn-active: #6a2522;
+      --compare-warn-bg: color-mix(in srgb, #ffb74d 12%, transparent);
+    }
+    html[data-theme="pink"] {
+      color-scheme: dark;
+      --surface: #1e181c;
+      --surface-container: #2a2228;
+      --surface-container-high: #322a32;
+      --surface-container-highest: #3a3139;
+      --surface-container-low: #221c20;
+      --surface-bright: #443a44;
+      --on-surface: #f7f0f3;
+      --on-surface-variant: #d8c6d0;
+      --outline-variant: #756676;
+      --primary: #ebc0d4;
+      --primary-dim: #f0d6e2;
+      --on-primary: #3d2a35;
+      --primary-container: #5c4558;
+      --ghost-border: rgba(235, 192, 212, 0.22);
+      --focus-ring: rgba(235, 192, 212, 0.45);
+      --err: #f0a0a8;
+      --error-container: #6e3a45;
+      --on-error-container: #ffd6dc;
+      --ok: #7ae3ae;
+      --danger-btn: #6e3a45;
+      --danger-btn-on: #ffd6dc;
+      --danger-btn-hover: #864a55;
+      --danger-btn-active: #5a2f38;
+      --compare-warn-bg: color-mix(in srgb, #e8a8c0 14%, transparent);
+    }
+    html[data-theme="gray"] {
+      color-scheme: dark;
+      --surface: #2c2c2e;
+      --surface-container: #36363a;
+      --surface-container-high: #3e3e42;
+      --surface-container-highest: #46464a;
+      --surface-container-low: #2f2f32;
+      --surface-bright: #4e4e52;
+      --on-surface: #f0f0f1;
+      --on-surface-variant: #b0b0b3;
+      --outline-variant: #656568;
+      --primary: #e6e6e7;
+      --primary-dim: #d0d0d2;
+      --on-primary: #2e2e30;
+      --primary-container: #5c5c60;
+      --ghost-border: rgba(150, 150, 152, 0.25);
+      --focus-ring: rgba(230, 230, 232, 0.45);
+      --err: #f67c7c;
+      --error-container: #6b2a2a;
+      --on-error-container: #fecaca;
+      --ok: #4ade80;
+      --danger-btn: #6b2a2a;
+      --danger-btn-on: #fecaca;
+      --danger-btn-hover: #823535;
+      --danger-btn-active: #5a2222;
+      --compare-warn-bg: color-mix(in srgb, #fbbf24 10%, transparent);
     }
     * { box-sizing: border-box; }
-    html { color-scheme: dark; }
+    html { color-scheme: dark light; }
     html, body { height: 100%; margin: 0; }
     body {
       font-family: "Inter", system-ui, -apple-system, sans-serif;
@@ -88,7 +204,7 @@
     .sidebar-resize-handle:hover::after,
     .sidebar-resize-handle:focus-visible::after,
     body.sidebar-resizing .sidebar-resize-handle::after {
-      background: rgba(198, 198, 199, 0.38);
+      background: color-mix(in srgb, var(--primary) 38%, transparent);
     }
     .sidebar-resize-handle:focus-visible {
       outline: 2px solid var(--focus-ring);
@@ -102,7 +218,13 @@
       cursor: ew-resize !important;
     }
     .sidebar-head {
-      padding: 0.75rem 0.85rem;
+      flex-shrink: 0;
+      height: var(--top-h);
+      min-height: var(--top-h);
+      display: flex;
+      align-items: center;
+      padding: 0 0.85rem;
+      box-sizing: border-box;
       border-bottom: 1px solid var(--ghost-border);
       font-weight: 600;
       font-size: 0.8rem;
@@ -386,27 +508,42 @@
       border: 1px solid var(--ghost-border);
     }
     .tab {
-      border: 0;
+      border: 1px solid transparent;
       background: transparent;
       color: var(--on-surface-variant);
-      padding: 0.4rem 1.1rem;
+      padding: 0.35rem 1.05rem;
       border-radius: 999px;
       cursor: pointer;
       font-family: inherit;
       font-size: 0.8125rem;
       font-weight: 500;
-      transition: color var(--ui-ease), background var(--ui-ease), box-shadow var(--ui-ease);
+      line-height: 1.2;
+      box-shadow: none;
+      transition: color var(--ui-ease), background var(--ui-ease), box-shadow var(--ui-ease),
+        border-color var(--ui-ease);
     }
+    /* Неактивная вкладка: лёгкий залив + внутренняя «кайма» (не путать с «выбрано») */
     .tab:hover:not(.active) {
       color: var(--on-surface);
       background: var(--surface-container);
+      box-shadow: inset 0 0 0 1px var(--ghost-border);
     }
     .tab.active {
-      background: var(--surface-container-high);
+      background: var(--surface-bright);
       color: var(--on-surface);
+      font-weight: 600;
+      border-color: var(--outline-variant);
+      box-shadow: 0 0 0 1px var(--ghost-border),
+        0 1px 2px color-mix(in srgb, var(--on-surface) 10%, transparent);
     }
-    .tab.active:hover { background: var(--surface-bright); }
-    .tab:active:not(.active) { background: var(--surface-container-high); }
+    .tab.active:hover {
+      background: var(--surface-container-highest);
+      border-color: color-mix(in srgb, var(--primary) 40%, var(--outline-variant));
+    }
+    .tab:active:not(.active) {
+      background: var(--surface-container-high);
+      box-shadow: inset 0 0 0 1px var(--ghost-border);
+    }
     .tab:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;
@@ -560,12 +697,12 @@
     }
     .chat-toolbar select:hover:not(:disabled) {
       background: var(--surface-container-high);
-      border-color: rgba(198, 198, 199, 0.22);
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
     }
     .chat-toolbar select:focus-visible {
       outline: none;
-      border-color: rgba(198, 198, 199, 0.45);
-      box-shadow: 0 0 0 1px rgba(184, 185, 185, 0.12);
+      border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-dim) 12%, transparent);
     }
     .rag-scope-box { display: flex; flex-direction: column; gap: 0; min-width: 220px; max-width: min(100%, 440px); }
     .rag-scope-label { font-size: 0.75rem; color: var(--on-surface-variant); margin: 0; }
@@ -639,6 +776,18 @@
     .msg.user .msg-bubble {
       background: var(--surface-container-high);
     }
+    .msg-bubble.msg-bubble-pending {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--on-surface-variant);
+      font-style: normal;
+    }
+    .msg-bubble.msg-bubble-error {
+      border-color: color-mix(in srgb, var(--err) 45%, transparent);
+      background: color-mix(in srgb, var(--err) 8%, transparent);
+      color: var(--err);
+    }
     .msg-meta { font-size: 0.7rem; color: var(--on-surface-variant); text-transform: uppercase; letter-spacing: 0.06em; }
     .citations-block {
       font-size: 0.75rem;
@@ -658,7 +807,10 @@
       margin: -0.1rem -0.2rem;
       transition: color var(--ui-ease), background var(--ui-ease);
     }
-    .citations-block summary:hover { color: var(--on-surface); background: rgba(37, 38, 38, 0.6); }
+    .citations-block summary:hover {
+      color: var(--on-surface);
+      background: color-mix(in srgb, var(--on-surface) 8%, var(--surface-container-low));
+    }
     .citations-block summary:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 1px;
@@ -714,8 +866,8 @@
       padding: 0.65rem 0.85rem;
     }
     #message-composer:focus-within {
-      border-color: rgba(198, 198, 199, 0.45);
-      box-shadow: 0 0 0 1px rgba(184, 185, 185, 0.15);
+      border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-dim) 15%, transparent);
     }
     #chatIn {
       flex: 1;
@@ -724,9 +876,12 @@
       color: var(--on-surface);
       font-family: inherit;
       font-size: 0.9375rem;
+      line-height: 1.45;
       resize: none;
-      min-height: 44px;
-      max-height: 200px;
+      min-height: calc(1.45em + 1rem);
+      max-height: calc(1.45em * 12);
+      overflow-y: hidden;
+      box-sizing: border-box;
       outline: none;
     }
     .btn-send {
@@ -773,7 +928,17 @@
     .status { font-size: 0.85rem; }
     .status.ok { color: var(--ok); }
     .status.err { color: var(--err); }
-    .head-status { padding: 0 1.25rem; font-size: 0.8rem; min-height: 1.25rem; }
+    /* Без пустой полосы под topbar: default margin у <p> и min-height съедали место до «Выбор документов» */
+    .head-status {
+      margin: 0;
+      padding: 0 1.25rem;
+      font-size: 0.8rem;
+    }
+    .head-status:not(:empty) {
+      min-height: 1.25rem;
+      padding-top: 0.2rem;
+      padding-bottom: 0.2rem;
+    }
     /* Documents */
     .card {
       background: var(--surface-container);
@@ -794,7 +959,7 @@
       transition: border-color var(--ui-ease), background var(--ui-ease);
     }
     .drop-zone:hover {
-      border-color: rgba(198, 198, 199, 0.35);
+      border-color: color-mix(in srgb, var(--primary) 35%, transparent);
       background: var(--surface-container);
     }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
@@ -810,12 +975,12 @@
       transition: border-color var(--ui-ease), background var(--ui-ease), box-shadow var(--ui-ease);
     }
     input[type="text"]:hover, input[type="password"]:hover, textarea:hover, select.field-input:hover {
-      border-color: rgba(198, 198, 199, 0.22);
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
     }
     input[type="text"]:focus-visible, input[type="password"]:focus-visible, textarea:focus-visible, select.field-input:focus-visible {
       outline: none;
-      border-color: rgba(198, 198, 199, 0.45);
-      box-shadow: 0 0 0 1px rgba(184, 185, 185, 0.12);
+      border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-dim) 12%, transparent);
     }
     #fileIn {
       max-width: 100%;
@@ -837,7 +1002,7 @@
     }
     #fileIn::file-selector-button:hover {
       background: var(--surface-bright);
-      border-color: rgba(198, 198, 199, 0.25);
+      border-color: color-mix(in srgb, var(--primary) 25%, transparent);
     }
     #fileIn::file-selector-button:active { background: var(--surface-container-highest); }
     #fileIn:focus-visible::file-selector-button {
@@ -885,7 +1050,7 @@
     }
     button.btn.secondary:hover:not(:disabled) {
       background: var(--surface-bright);
-      border-color: rgba(198, 198, 199, 0.22);
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
     }
     button.btn.secondary:active:not(:disabled) {
       background: var(--surface-container-highest);
@@ -893,16 +1058,16 @@
     }
     button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
     button.btn.danger {
-      background: #7f2927;
-      color: #ff9993;
-      border-color: rgba(255, 153, 147, 0.15);
+      background: var(--danger-btn);
+      color: var(--danger-btn-on);
+      border-color: color-mix(in srgb, var(--danger-btn-on) 15%, transparent);
     }
     button.btn.danger:hover:not(:disabled) {
-      background: #9a3d39;
-      border-color: rgba(255, 153, 147, 0.28);
+      background: var(--danger-btn-hover);
+      border-color: color-mix(in srgb, var(--danger-btn-on) 28%, transparent);
     }
     button.btn.danger:active:not(:disabled) {
-      background: #6d2523;
+      background: var(--danger-btn-active);
       transform: scale(0.98);
     }
     .btn-file-import {
@@ -923,14 +1088,14 @@
     }
     .btn-file-import:hover {
       background: var(--surface-bright);
-      border-color: rgba(198, 198, 199, 0.22);
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
     }
     .btn-file-import:active { background: var(--surface-container-highest); transform: scale(0.98); }
     .btn-file-import:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-md); }
     table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
     th, td { text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--ghost-border); }
     #tblCols tbody tr:hover, #tblDocs tbody tr:hover {
-      background: rgba(25, 26, 26, 0.55);
+      background: color-mix(in srgb, var(--on-surface) 6%, var(--surface));
     }
     th { color: var(--on-surface-variant); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
     pre, .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
@@ -944,7 +1109,10 @@
       margin: 0 -0.1rem;
       transition: color var(--ui-ease), background var(--ui-ease);
     }
-    footer.doc-foot a:hover { color: var(--primary-dim); background: rgba(198, 198, 199, 0.08); }
+    footer.doc-foot a:hover {
+      color: var(--primary-dim);
+      background: color-mix(in srgb, var(--primary) 8%, transparent);
+    }
     footer.doc-foot a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .empty-chat {
       text-align: center;
@@ -958,7 +1126,8 @@
       width: 100%;
       margin-left: 0;
       margin-right: 0;
-      padding-top: 1.5rem;
+      /* Меньше зазор под .topbar, не трогая бока/низ; только вкладка «Тесты» */
+      padding-top: 0.5rem;
       padding-left: 1.25rem;
       padding-right: 1.5rem;
       box-sizing: border-box;
@@ -980,7 +1149,7 @@
     }
     #view-tests .tests-card {
       background: var(--surface-container-low);
-      border: 1px solid rgba(72, 72, 72, 0.25);
+      border: 1px solid color-mix(in srgb, var(--outline-variant) 35%, transparent);
       border-radius: var(--radius-lg);
       padding: 1rem 1.15rem 1.1rem;
       margin-bottom: 0.9rem;
@@ -1006,19 +1175,22 @@
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     .tests-omnibar-wrap:focus-within {
-      border-color: rgba(198, 198, 199, 0.45);
-      box-shadow: 0 0 0 1px rgba(184, 185, 185, 0.12);
+      border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-dim) 12%, transparent);
     }
     #testCommonQ {
       width: 100%;
-      min-height: 3rem;
+      min-height: calc(1.45em + 1rem);
+      max-height: calc(1.45em * 12);
       border: 0;
       background: transparent;
       color: var(--on-surface);
       font-family: inherit;
       font-size: 0.9rem;
       line-height: 1.45;
-      resize: vertical;
+      resize: none;
+      overflow-y: hidden;
+      box-sizing: border-box;
       outline: none;
     }
     .tests-actions-row {
@@ -1064,12 +1236,31 @@
       #view-tests .tests-grid { grid-template-columns: 1fr; }
     }
     .tests-results-wrap { margin: 0 0 0.75rem; }
+    .tests-results-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.45rem 1rem;
+      margin: 0 0 0.5rem 0;
+    }
     .tests-results-legend {
       font-size: 0.8rem;
       color: var(--on-surface-variant);
-      margin: 0 0 0.5rem 0;
+      margin: 0;
+      flex: 1 1 14rem;
       max-width: 40rem;
       line-height: 1.4;
+    }
+    .tests-results-pair-id {
+      font-size: 0.72rem;
+      color: var(--on-surface-variant);
+      margin: 0;
+      flex: 0 1 auto;
+      max-width: 100%;
+      text-align: right;
+      line-height: 1.35;
+      word-break: break-all;
     }
     .test-col--output {
       min-height: 0;
@@ -1088,7 +1279,7 @@
       max-height: 280px;
     }
     .test-col {
-      border: 1px solid rgba(72, 72, 72, 0.28);
+      border: 1px solid color-mix(in srgb, var(--outline-variant) 40%, transparent);
       border-radius: 14px;
       padding: 0.75rem 0.9rem 0.85rem;
       background: var(--surface-container);
@@ -1112,13 +1303,13 @@
       transition: border-color var(--ui-ease), background var(--ui-ease), box-shadow var(--ui-ease);
     }
     .profile-form input[type="text"]:hover, .profile-form input[type="number"]:hover, .profile-form select:hover, .profile-form textarea:hover {
-      border-color: rgba(198, 198, 199, 0.22);
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
     }
     .profile-form input[type="text"]:focus-visible, .profile-form input[type="number"]:focus-visible,
     .profile-form select:focus-visible, .profile-form textarea:focus-visible {
       outline: none;
-      border-color: rgba(198, 198, 199, 0.45);
-      box-shadow: 0 0 0 1px rgba(184, 185, 185, 0.1);
+      border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-dim) 10%, transparent);
     }
     /* Нативные spinners: не трогаем ::-webkit-* (filter/appearance ломают отрисовку в Chrome). */
     .profile-form .pf-lbl input[type="checkbox"] {
@@ -1171,10 +1362,78 @@
       margin-top: 0.5rem;
       padding: 0.5rem 0.55rem;
       background: var(--surface-container-high);
-      border: 1px solid rgba(72, 72, 72, 0.2);
+      border: 1px solid color-mix(in srgb, var(--outline-variant) 28%, transparent);
       border-radius: var(--radius-md);
     }
     #view-tests .tests-compare-card h3 { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.4rem; color: var(--on-surface); }
+    .test-compare-summary {
+      font-size: 0.72rem;
+      color: var(--on-surface-variant);
+      margin: 0 0 0.45rem 0;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+    .test-compare-error {
+      font-size: 0.8rem;
+      color: var(--err);
+      margin: 0 0 0.5rem 0;
+    }
+    .test-compare-table-wrap {
+      overflow-x: auto;
+      overflow-y: visible;
+      margin: 0 0 0.6rem 0;
+      border: 1px solid color-mix(in srgb, var(--outline-variant) 28%, transparent);
+      border-radius: var(--radius-md);
+    }
+    .test-compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.74rem;
+      background: var(--surface-container-high);
+    }
+    .test-compare-table th,
+    .test-compare-table td {
+      border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 22%, transparent);
+      padding: 0.35rem 0.45rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .test-compare-table th {
+      position: sticky;
+      top: 0;
+      background: var(--surface-container-highest);
+      color: var(--on-surface-variant);
+      font-weight: 600;
+      z-index: 1;
+    }
+    .test-compare-table .test-compare-path {
+      font-family: ui-monospace, monospace;
+      font-size: 0.7rem;
+      color: var(--on-surface-variant);
+      max-width: 12rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .test-compare-table tr.test-compare-diff td:nth-child(n+2) {
+      background: var(--compare-warn-bg);
+    }
+    .test-compare-table tr.test-compare-row-answer td:nth-child(2),
+    .test-compare-table tr.test-compare-row-answer td:nth-child(3) {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .test-compare-raw { margin-top: 0.15rem; }
+    .test-compare-raw-summary {
+      cursor: pointer;
+      font-size: 0.78rem;
+      color: var(--on-surface-variant);
+      padding: 0.2rem 0;
+      user-select: none;
+      list-style: none;
+    }
+    .test-compare-raw-summary::-webkit-details-marker { display: none; }
+    .test-compare-raw-summary:hover { color: var(--on-surface); }
     .view-inner::-webkit-scrollbar, #view-chat #chat-messages::-webkit-scrollbar, .rag-col-list::-webkit-scrollbar, .test-out::-webkit-scrollbar {
       width: 6px;
     }
@@ -1202,7 +1461,7 @@
       align-items: center;
       justify-content: center;
       padding: 1.25rem;
-      background: rgba(14, 14, 14, 0.72);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
       -webkit-backdrop-filter: blur(18px);
       backdrop-filter: blur(18px);
     }
@@ -1213,7 +1472,7 @@
       background: var(--surface-container-high);
       border: 1px solid var(--ghost-border);
       border-radius: var(--radius-lg);
-      box-shadow: 0 24px 64px rgba(231, 229, 228, 0.04);
+      box-shadow: 0 24px 64px color-mix(in srgb, var(--on-surface) 6%, transparent);
       padding: 1.15rem 1.25rem 1rem;
       color: var(--on-surface);
       font-family: inherit;
@@ -1253,7 +1512,7 @@
     }
     .app-modal-field input:focus {
       outline: none;
-      border-color: rgba(72, 72, 72, 0.55);
+      border-color: color-mix(in srgb, var(--outline-variant) 55%, transparent);
       box-shadow: 0 0 0 2px var(--focus-ring);
     }
     .app-modal-actions {
@@ -1294,18 +1553,78 @@
       filter: none;
     }
     .app-modal-btn-danger {
-      background: var(--error-container);
-      color: var(--on-error-container);
-      border-color: rgba(238, 125, 119, 0.35);
+      background: var(--danger-btn);
+      color: var(--danger-btn-on);
+      border-color: color-mix(in srgb, var(--err) 35%, transparent);
     }
     .app-modal-btn-danger:hover { filter: brightness(1.08); }
-    #view-settings input[type="checkbox"] {
-      width: 1rem;
-      height: 1rem;
+    /* Переключатель (настройки: отладка) */
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
       cursor: pointer;
-      accent-color: var(--primary);
+      user-select: none;
+      margin-top: 0.35rem;
+      max-width: 100%;
+    }
+    .switch-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+    }
+    .switch-track {
+      position: relative;
+      width: 44px;
+      height: 26px;
+      flex-shrink: 0;
+      border-radius: 9999px;
+      background: var(--surface-container-highest);
+      border: 1px solid var(--ghost-border);
+      transition: background var(--ui-ease), border-color var(--ui-ease);
+    }
+    .switch-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--on-surface-variant);
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--surface) 55%, transparent);
+      transition: transform var(--ui-ease), background var(--ui-ease), box-shadow var(--ui-ease);
+    }
+    .switch-input:focus-visible + .switch-track {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    .switch-input:checked + .switch-track {
+      background: color-mix(in srgb, var(--primary) 32%, var(--surface-container-highest));
+      border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+    }
+    .switch-input:checked + .switch-track .switch-thumb {
+      transform: translateX(20px);
+      background: var(--primary);
+      box-shadow: 0 1px 4px color-mix(in srgb, var(--primary) 40%, transparent);
+    }
+    .switch-label {
+      font-size: 0.85rem;
+      color: var(--on-surface-variant);
+      line-height: 1.35;
     }
   </style>
+  <script>
+    (function () {
+      var K = "knowledge_theme";
+      var ALLOW = ["dark", "light", "blue", "pink", "gray"];
+      var v = localStorage.getItem(K) || "dark";
+      if (ALLOW.indexOf(v) < 0) v = "dark";
+      document.documentElement.setAttribute("data-theme", v);
+      document.documentElement.style.colorScheme = v === "light" ? "light" : "dark";
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
@@ -1331,7 +1650,6 @@
           </div>
         </div>
         <div class="sidebar-panel hidden" id="sidebar-settings-panel">
-          <p class="sidebar-hint">Настройки открыты справа. Иконка шестерёнки вверху.</p>
         </div>
         <div class="sidebar-panel hidden" id="sidebar-tests-panel">
           <p class="sidebar-hint" style="flex-shrink:0;margin:0 0 0.35rem 0"><strong>★ Favorite</strong></p>
@@ -1344,9 +1662,9 @@
     <div class="workspace">
       <header class="topbar">
         <div class="tabs" role="tablist">
-          <button type="button" class="tab" data-view="docs" id="tabDocs" role="tab">Документы</button>
-          <button type="button" class="tab active" data-view="chat" id="tabChat" role="tab">Чат</button>
-          <button type="button" class="tab" data-view="tests" id="tabTests" role="tab">Тесты</button>
+          <button type="button" class="tab" data-view="docs" id="tabDocs" role="tab" aria-selected="false">Документы</button>
+          <button type="button" class="tab active" data-view="chat" id="tabChat" role="tab" aria-selected="true">Чат</button>
+          <button type="button" class="tab" data-view="tests" id="tabTests" role="tab" aria-selected="false">Тесты</button>
         </div>
         <div class="topbar-settings">
           <button type="button" class="btn-gear" id="btnSettings" title="Настройки" aria-label="Настройки">⚙</button>
@@ -1475,19 +1793,30 @@
             </div>
             <div class="card">
               <h2>Отладка</h2>
-              <label class="row" style="margin-top:0.5rem;align-items:flex-start;cursor:pointer">
-                <input type="checkbox" id="debugMode" style="width:auto;margin-top:0.2rem" />
-                <span class="status" style="margin:0">Заголовок <span class="mono">X-Debug: 1</span> — подробные логи и trace при ошибке чата (<span class="mono">APP_ALLOW_CLIENT_DEBUG</span>).</span>
+              <label class="switch" for="debugMode">
+                <input type="checkbox" id="debugMode" class="switch-input" />
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                <span class="switch-label">Подробные логи и trace при ошибке чата</span>
               </label>
             </div>
             <div class="card">
-              <h2>Тесты качества RAG</h2>
-              <p class="status" style="margin:0 0 0.5rem">Сравнение двух runtime-профилей: retrieval, temperature, system prompt, LLM on/off.</p>
-              <button type="button" class="btn" id="btnOpenTests">Открыть тесты</button>
+              <h2>Цветовая схема</h2>
+              <label class="field" for="uiTheme">Тема интерфейса</label>
+              <select id="uiTheme" class="field-input" style="max-width: 20rem">
+                <option value="dark">Тёмная</option>
+                <option value="light">Светлая</option>
+                <option value="blue">Синяя</option>
+                <option value="pink">Розовая</option>
+                <option value="gray">Серая</option>
+              </select>
             </div>
             <div class="card" id="mainChatOverrideCard">
               <h2>Основной чат: overrides</h2>
               <p class="status mono" id="mainChatProfileOut" style="margin:0.35rem 0;white-space:pre-wrap;max-height:6rem;overflow:auto">—</p>
+              <div style="margin:0.35rem 0;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+                <button type="button" class="btn secondary" id="btnResetMainChatProfile" title="Удалить сохранённые overrides из SQLite (distance_threshold, system_prompt и т.д.)">Сбросить overrides чата</button>
+                <span class="status" style="margin:0;font-size:0.8rem">DELETE <span class="mono">/v1/rag-test/main-chat-profile</span></span>
+              </div>
               <p class="status" style="margin:0.35rem 0;font-size:0.8rem">Применяются только safe runtime-поля (см. API <span class="mono">/v1/rag-test/apply-to-chat</span>).</p>
             </div>
           </div>
@@ -1679,7 +2008,7 @@
             <section class="tests-card tests-question" aria-label="Вопрос и запуск">
               <div class="tests-card-title">Общий вопрос</div>
               <div class="tests-omnibar-wrap">
-                <textarea id="testCommonQ" rows="3" placeholder="Сформулируйте вопрос к базе (один и тот же для A, B и сравнения)…" aria-label="Вопрос для A/B"></textarea>
+                <textarea id="testCommonQ" rows="1" placeholder="Сформулируйте вопрос к базе (один и тот же для A, B и сравнения)…" aria-label="Вопрос для A/B"></textarea>
               </div>
               <div class="tests-actions-row">
                 <div class="tests-run-buttons">
@@ -1698,7 +2027,10 @@
               </div>
             </section>
             <div class="tests-results-wrap" aria-label="Краткие ответы прогонов A и B">
-              <p class="tests-results-legend">Ответы появляются после «Запустить A» / «Запустить B»; при сравнении сюда копируется начало ответа.</p>
+              <div class="tests-results-head">
+                <p class="tests-results-legend">Ответы появляются после «Запустить A» / «Запустить B»; при сравнении сюда копируется начало ответа.</p>
+                <p id="testPairIdBadge" class="tests-results-pair-id" hidden aria-live="polite"></p>
+              </div>
               <div class="tests-grid tests-grid--outputs">
                 <div class="test-col test-col--output" data-side="A">
                   <h4 class="tests-output-title">Ответ A</h4>
@@ -1712,7 +2044,15 @@
             </div>
             <section class="tests-card tests-compare-card" style="margin-top:0.25rem">
               <h3>Результат A/B (после «Сравнить A/B»)</h3>
-              <pre class="test-out" id="testCompareOut" style="max-height:320px">—</pre>
+              <div id="testCompareSummary" class="test-compare-summary" aria-live="polite"></div>
+              <div id="testCompareError" class="test-compare-error" hidden role="alert"></div>
+              <div id="testCompareTableWrap" class="test-compare-table-wrap" hidden>
+                <table class="test-compare-table" id="testCompareTable" aria-label="Сравнение ответов A и B"></table>
+              </div>
+              <details class="test-compare-raw">
+                <summary class="test-compare-raw-summary">Показать raw JSON</summary>
+                <pre class="test-out" id="testCompareOut" style="max-height:320px">—</pre>
+              </details>
             </section>
           </div>
         </div>
@@ -1731,6 +2071,22 @@
     const $ = (id) => document.getElementById(id);
     const keyStore = "knowledge_api_key";
     const debugStore = "knowledge_debug";
+    const themeStore = "knowledge_theme";
+    const THEME_IDS = ["dark", "light", "blue", "pink", "gray"];
+    function normalizeTheme(t) {
+      const s = t != null ? String(t) : "";
+      return THEME_IDS.includes(s) ? s : "dark";
+    }
+    function applyUiTheme(t) {
+      const name = normalizeTheme(t);
+      document.documentElement.setAttribute("data-theme", name);
+      document.documentElement.style.colorScheme = name === "light" ? "light" : "dark";
+      try {
+        localStorage.setItem(themeStore, name);
+      } catch (e) {}
+      const sel = $("uiTheme");
+      if (sel) sel.value = name;
+    }
     const cidStore = "knowledge_selected_cid";
     const ragScopeStore = "knowledge_rag_scope";
     const threadStore = "knowledge_active_thread_id";
@@ -1738,6 +2094,8 @@
     let selectedCid = null;
     let ragScope = { all: true, ids: [] };
     let activeThreadId = null;
+    /** Последняя история с сервера (GET messages); для оптимистичного UI до ответа LLM. */
+    let chatMessagesSnapshot = [];
     let authConfigured = false;
     const collections = [];
     let currentView = "chat";
@@ -2130,6 +2488,7 @@
               stEl.textContent = "Готово";
             }
             nOk++;
+            ragScopeNoteDocumentMoved(it.source, targetCid);
             if (openSel && it.docId === openSel) openDocSucceeded = true;
           } catch (err) {
             nErr++;
@@ -2257,6 +2616,7 @@
             { method: "POST", headers: headers(true), body: JSON.stringify({ source_collection_id: payload.source }) }
           );
           if (!r.ok) throw new Error(await r.text());
+          ragScopeNoteDocumentMoved(payload.source, targetCid);
           if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === payload.docId) {
             localStorage.setItem(cidStore, targetCid);
             knowledgeSelection = { type: "document", sectionId: targetCid, documentId: payload.docId };
@@ -2796,6 +3156,12 @@
       };
       applyDebugFromStorage();
     }
+    if ($("uiTheme")) {
+      $("uiTheme").value = normalizeTheme(
+        localStorage.getItem(themeStore) || document.documentElement.getAttribute("data-theme")
+      );
+      $("uiTheme").onchange = () => applyUiTheme($("uiTheme").value);
+    }
     /** Ошибки в UI — через errBox / showHead; не использовать alert(). */
     function errBox(el, e) { el.textContent = e || ""; }
     function showHead(s, ok) {
@@ -3041,9 +3407,11 @@
 
     function setView(name) {
       currentView = name;
-      document.querySelectorAll(".tab").forEach((b) =>
-        b.classList.toggle("active", b.getAttribute("data-view") === name)
-      );
+      document.querySelectorAll(".tab").forEach((b) => {
+        const isActive = b.getAttribute("data-view") === name;
+        b.classList.toggle("active", isActive);
+        b.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
       document.querySelectorAll(".view").forEach((v) =>
         v.classList.toggle("active", v.id === "view-" + name)
       );
@@ -3059,7 +3427,6 @@
       btn.onclick = () => setView(btn.getAttribute("data-view"));
     });
     $("btnSettings").onclick = () => setView("settings");
-    if ($("btnOpenTests")) $("btnOpenTests").onclick = () => setView("tests");
 
     const testProfileStoreA = "knowledge_test_profile_a";
     const testProfileStoreB = "knowledge_test_profile_b";
@@ -3447,6 +3814,36 @@
       el.textContent = text;
       el.className = "test-action-status " + (ok ? "ok" : "err");
     }
+    /** Autosize «Общий вопрос» на вкладке Тесты: до max-height (~12 строк), затем overflow-y: auto. */
+    function autosizeTestQuestion() {
+      const el = $("testCommonQ");
+      if (!el) return;
+      el.style.height = "auto";
+      const style = getComputedStyle(el);
+      const maxPx = parseFloat(style.maxHeight);
+      const minPx = parseFloat(style.minHeight);
+      const contentH = el.scrollHeight;
+      const cap = Number.isFinite(maxPx) && maxPx > 0 ? maxPx : contentH;
+      const lo = Number.isFinite(minPx) && minPx > 0 ? minPx : 0;
+      const target = Math.max(lo, Math.min(contentH, cap));
+      el.style.height = target + "px";
+      el.style.overflowY = contentH > cap ? "auto" : "hidden";
+    }
+    /** Autosize поля сообщения на вкладке Чат: до max-height (~12 строк), затем overflow-y: auto. */
+    function autosizeChatInput() {
+      const el = $("chatIn");
+      if (!el) return;
+      el.style.height = "auto";
+      const style = getComputedStyle(el);
+      const maxPx = parseFloat(style.maxHeight);
+      const minPx = parseFloat(style.minHeight);
+      const contentH = el.scrollHeight;
+      const cap = Number.isFinite(maxPx) && maxPx > 0 ? maxPx : contentH;
+      const lo = Number.isFinite(minPx) && minPx > 0 ? minPx : 0;
+      const target = Math.max(lo, Math.min(contentH, cap));
+      el.style.height = target + "px";
+      el.style.overflowY = contentH > cap ? "auto" : "hidden";
+    }
     function setTestRunLoading(on, label) {
       const loader = $("testRunLoader");
       const tx = $("testRunLoaderText");
@@ -3484,6 +3881,7 @@
         return;
       }
       setTestRunLoading(true, side === "A" ? "Прогон A…" : "Прогон B…");
+      setTestPairIdBadge(null);
       out.textContent = "…";
       const scope = getTestScopeObject();
       let actionText = null;
@@ -3522,6 +3920,246 @@
         if (actionText != null) setTestActionStatus(actionText, actionOk);
       }
     }
+    function formatCompareScalar(val, maxStr) {
+      const unlimited = maxStr === Infinity;
+      const m = unlimited ? Infinity : maxStr == null ? 120 : maxStr;
+      if (val === undefined || val === null) return "—";
+      if (typeof val === "boolean") return val ? "да" : "нет";
+      if (typeof val === "number") {
+        if (!Number.isFinite(val)) return "—";
+        return String(val);
+      }
+      if (typeof val === "string") {
+        const t = val.trim();
+        if (!t) return "—";
+        if (unlimited || t.length <= m) return t;
+        return t.slice(0, m) + "…";
+      }
+      return "(" + typeof val + ")";
+    }
+    function numericDeltaDisplay(a, b) {
+      if (typeof a !== "number" || typeof b !== "number") return null;
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+      const d = b - a;
+      if (Math.abs(d) < 1e-6) return "0";
+      const abs = Math.abs(d);
+      const dec = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+      const s = d.toFixed(dec).replace(/\.?0+$/, "");
+      return (d > 0 ? "+" : "") + s;
+    }
+    function verdictForComparePair(a, b) {
+      const hasA = a !== undefined && a !== null;
+      const hasB = b !== undefined && b !== null;
+      if (!hasA && hasB) return "только в B";
+      if (hasA && !hasB) return "только в A";
+      if (!hasA && !hasB) return "—";
+      if (typeof a === "number" && typeof b === "number") {
+        const d = numericDeltaDisplay(a, b);
+        if (d === "0") return "одинаково";
+        if (d === null) return "различается";
+        return "Δ (B−A): " + d;
+      }
+      if (typeof a === "boolean" && typeof b === "boolean")
+        return a === b ? "одинаково" : "различается";
+      if (typeof a === "string" && typeof b === "string") {
+        if (a === b) return "одинаково";
+        return "различается · " + a.length + " ↔ " + b.length + " симв.";
+      }
+      return String(a) === String(b) ? "одинаково" : "различается";
+    }
+    function isCompareVerdictDiff(verdict) {
+      if (!verdict || verdict === "—" || verdict === "одинаково") return false;
+      if (verdict.indexOf("только в ") >= 0) return true;
+      if (verdict.indexOf("различается") >= 0) return true;
+      if (verdict.indexOf("Δ (B−A):") >= 0) return true;
+      return false;
+    }
+    function sideFlatForCompare(side) {
+      const out = {};
+      if (!side || typeof side !== "object") return out;
+      const scalars = [
+        "answer", "demo_mode", "llm_skipped", "llm_skip_reason",
+        "chunks_considered", "retrieved_count", "filtered_by_distance_count", "fallback_citations_used",
+      ];
+      for (const k of scalars) {
+        if (Object.prototype.hasOwnProperty.call(side, k)) out[k] = side[k];
+      }
+      if (Array.isArray(side.citations)) out.citations_count = side.citations.length;
+      if (Array.isArray(side.chunks)) out.chunks_count = side.chunks.length;
+      const met = side.metrics;
+      if (met && typeof met === "object") {
+        for (const [k, v] of Object.entries(met)) out["metrics." + k] = v;
+      }
+      const llm = side.llm_response_meta;
+      if (llm && typeof llm === "object") {
+        if (llm.model != null) out["llm.model"] = llm.model;
+        if (llm.provider != null) out["llm.provider"] = llm.provider;
+        const usage = llm.usage;
+        if (usage && typeof usage === "object") {
+          for (const [k, v] of Object.entries(usage)) {
+            if (k === "raw") continue;
+            out["llm.usage." + k] = v;
+          }
+        }
+      }
+      return out;
+    }
+    function sortComparePaths(paths) {
+      function rank(p) {
+        if (p === "answer") return [0, p];
+        if (!p.startsWith("metrics.") && !p.startsWith("llm.")) {
+          if (p === "citations_count" || p === "chunks_count") return [2, p];
+          return [1, p];
+        }
+        if (p.startsWith("metrics.")) return [3, p];
+        return [4, p];
+      }
+      return paths.slice().sort((a, b) => {
+        const [ra, ka] = rank(a);
+        const [rb, kb] = rank(b);
+        if (ra !== rb) return ra - rb;
+        return ka.localeCompare(kb);
+      });
+    }
+    function setTestCompareErrorMessage(msg) {
+      const errEl = $("testCompareError");
+      const wrap = $("testCompareTableWrap");
+      if (errEl) {
+        errEl.hidden = !msg;
+        errEl.textContent = msg || "";
+      }
+      if (wrap && msg) wrap.hidden = true;
+    }
+    /** Показать UUID пары A/B над карточками ответов (справа); скрыть при пустом id. */
+    function setTestPairIdBadge(pairId) {
+      const el = $("testPairIdBadge");
+      if (!el) return;
+      const id = pairId != null && String(pairId).trim() ? String(pairId).trim() : "";
+      if (!id) {
+        el.textContent = "";
+        el.removeAttribute("title");
+        el.hidden = true;
+        return;
+      }
+      el.textContent = "pair_id: " + id;
+      el.title = "pair_id: " + id;
+      el.hidden = false;
+    }
+    function stripLeadingPairIdLine(text) {
+      if (text == null) return text;
+      return String(text).replace(/^pair_id:\s*[^\n\r]+\r?\n?/m, "");
+    }
+    function prepareTestCompareLoading() {
+      const sumEl = $("testCompareSummary");
+      if (sumEl) sumEl.textContent = "Загрузка…";
+      setTestCompareErrorMessage("");
+      setTestPairIdBadge(null);
+      const wrap = $("testCompareTableWrap");
+      const tbl = $("testCompareTable");
+      if (wrap) wrap.hidden = true;
+      if (tbl) tbl.textContent = "";
+    }
+    function renderTestCompareTable(data) {
+      const wrap = $("testCompareTableWrap");
+      const tbl = $("testCompareTable");
+      const sumEl = $("testCompareSummary");
+      if (!tbl || !wrap) return;
+      tbl.textContent = "";
+      if (!data || typeof data !== "object") {
+        wrap.hidden = true;
+        if (sumEl) sumEl.textContent = "";
+        return;
+      }
+      const comp = data.comparison && typeof data.comparison === "object" ? data.comparison : null;
+      const L = sideFlatForCompare(data.left);
+      const R = sideFlatForCompare(data.right);
+      const pathSet = new Set([].concat(Object.keys(L), Object.keys(R)));
+      const paths = sortComparePaths(Array.from(pathSet));
+      const hasMeta = !!(
+        data.pair_id ||
+        data.left_run_id ||
+        data.right_run_id ||
+        (comp && Object.keys(comp).length)
+      );
+      if (!hasMeta && paths.length === 0) {
+        wrap.hidden = true;
+        if (sumEl) sumEl.textContent = "";
+        return;
+      }
+      wrap.hidden = false;
+      if (sumEl) {
+        const bits = [];
+        if (data.pair_id) bits.push("pair: " + data.pair_id);
+        if (data.left_run_id) bits.push("run A: " + data.left_run_id);
+        if (data.right_run_id) bits.push("run B: " + data.right_run_id);
+        sumEl.textContent = bits.join(" · ");
+      }
+      const thead = document.createElement("thead");
+      const hr = document.createElement("tr");
+      for (const h of ["Параметр", "Тест A", "Тест B", "Вывод"]) {
+        const th = document.createElement("th");
+        th.textContent = h;
+        hr.appendChild(th);
+      }
+      thead.appendChild(hr);
+      tbl.appendChild(thead);
+      const tb = document.createElement("tbody");
+      function addRow(pathLabel, cellA, cellB, verdict, diffRow, rowOpts) {
+        const tr = document.createElement("tr");
+        if (diffRow) tr.classList.add("test-compare-diff");
+        if (rowOpts && rowOpts.answerRow) tr.classList.add("test-compare-row-answer");
+        const td0 = document.createElement("td");
+        td0.className = "test-compare-path";
+        td0.textContent = pathLabel;
+        td0.title = pathLabel;
+        const td1 = document.createElement("td");
+        td1.textContent = cellA;
+        const td2 = document.createElement("td");
+        td2.textContent = cellB;
+        const td3 = document.createElement("td");
+        td3.textContent = verdict;
+        tr.appendChild(td0);
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tb.appendChild(tr);
+      }
+      if (data.pair_id != null && data.pair_id !== "")
+        addRow("pair_id", String(data.pair_id), "—", "—", false);
+      if (data.left_run_id != null && data.left_run_id !== "")
+        addRow("left_run_id", String(data.left_run_id), "—", "—", false);
+      if (data.right_run_id != null && data.right_run_id !== "")
+        addRow("right_run_id", String(data.right_run_id), "—", "—", false);
+      if (comp) {
+        if (comp.chunk_id_overlap != null)
+          addRow(
+            "comparison.chunk_id_overlap",
+            "—",
+            "—",
+            String(comp.chunk_id_overlap) + " общих chunk_id",
+            false
+          );
+        if (comp.delta_total_ms != null)
+          addRow(
+            "comparison.delta_total_ms",
+            "—",
+            "—",
+            String(comp.delta_total_ms) + " ms (A−B, сервер)",
+            false
+          );
+      }
+      for (const p of paths) {
+        const a = L[p];
+        const b = R[p];
+        const isAnswer = p === "answer";
+        const maxLen = isAnswer ? Infinity : 100;
+        const ca = formatCompareScalar(a, maxLen);
+        const cb = formatCompareScalar(b, maxLen);
+        const v = verdictForComparePair(a, b);
+        addRow(p, ca, cb, v, isCompareVerdictDiff(v), isAnswer ? { answerRow: true } : null);
+      }
+      tbl.appendChild(tb);
+    }
     async function runTestCompare() {
       const q = ($("testCommonQ") && $("testCommonQ").value.trim()) || "";
       if (!q) { setTestActionStatus("Введите вопрос.", false); return; }
@@ -3533,19 +4171,26 @@
       try {
         left = getProfileFromForm("A");
       } catch (e) {
-        $("testCompareOut").textContent = "A: " + e;
+        if ($("testCompareOut")) $("testCompareOut").textContent = "A: " + e;
+        setTestCompareErrorMessage("A: " + e);
+        renderTestCompareTable(null);
+        setTestPairIdBadge(null);
         setTestActionStatus("A: " + e, false);
         return;
       }
       try {
         right = getProfileFromForm("B");
       } catch (e) {
-        $("testCompareOut").textContent = "B: " + e;
+        if ($("testCompareOut")) $("testCompareOut").textContent = "B: " + e;
+        setTestCompareErrorMessage("B: " + e);
+        renderTestCompareTable(null);
+        setTestPairIdBadge(null);
         setTestActionStatus("B: " + e, false);
         return;
       }
       setTestRunLoading(true, "Сравнение A/B…");
-      $("testCompareOut").textContent = "…";
+      prepareTestCompareLoading();
+      if ($("testCompareOut")) $("testCompareOut").textContent = "…";
       const scope = getTestScopeObject();
       let actionText = null;
       let actionOk = true;
@@ -3559,18 +4204,25 @@
         if (!r.ok) throw new Error(t);
         const data = JSON.parse(t);
         lastTestCompare = data;
-        $("testCompareOut").textContent = JSON.stringify(data, null, 2);
+        if ($("testCompareOut")) $("testCompareOut").textContent = JSON.stringify(data, null, 2);
+        setTestCompareErrorMessage("");
+        renderTestCompareTable(data);
+        setTestPairIdBadge(data.pair_id);
         if ($("testOutA") && data.left) {
-          const meta = (data.left.metrics) || {};
-          $("testOutA").textContent = "pair_id: " + (data.pair_id || "—") + "\n" + (data.left.answer || "").slice(0, 1500);
+          const s = (data.left.answer || "").slice(0, 1500);
+          $("testOutA").textContent = s || "—";
         }
         if ($("testOutB") && data.right) {
-          $("testOutB").textContent = "pair_id: " + (data.pair_id || "—") + "\n" + (data.right.answer || "").slice(0, 1500);
+          const s = (data.right.answer || "").slice(0, 1500);
+          $("testOutB").textContent = s || "—";
         }
         actionText = "A/B готово, пары сохранены на сервере (run ids).";
         actionOk = true;
       } catch (e) {
-        $("testCompareOut").textContent = String(e);
+        if ($("testCompareOut")) $("testCompareOut").textContent = String(e);
+        setTestCompareErrorMessage(String(e));
+        renderTestCompareTable(null);
+        setTestPairIdBadge(null);
         actionText = String(e);
         actionOk = false;
       } finally {
@@ -3636,9 +4288,47 @@
         }
       }
       const oa = snap.outputs || {};
-      if ($("testOutA")) $("testOutA").textContent = oa.out_a != null ? String(oa.out_a) : "—";
-      if ($("testOutB")) $("testOutB").textContent = oa.out_b != null ? String(oa.out_b) : "—";
       if ($("testCompareOut")) $("testCompareOut").textContent = oa.compare != null ? String(oa.compare) : "";
+      let resolvedPairId = null;
+      if (lastTestCompare && typeof lastTestCompare === "object" && lastTestCompare.pair_id != null) {
+        const p = String(lastTestCompare.pair_id).trim();
+        if (p) resolvedPairId = lastTestCompare.pair_id;
+      }
+      if (!resolvedPairId && oa.compare != null) {
+        const raw = String(oa.compare).trim();
+        if (raw.charAt(0) === "{") {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.pair_id != null && String(parsed.pair_id).trim())
+              resolvedPairId = parsed.pair_id;
+          } catch (e) {}
+        }
+      }
+      let txtA = oa.out_a != null ? String(oa.out_a) : "—";
+      let txtB = oa.out_b != null ? String(oa.out_b) : "—";
+      if (resolvedPairId) {
+        txtA = stripLeadingPairIdLine(txtA);
+        txtB = stripLeadingPairIdLine(txtB);
+      }
+      if ($("testOutA")) $("testOutA").textContent = txtA || "—";
+      if ($("testOutB")) $("testOutB").textContent = txtB || "—";
+      setTestCompareErrorMessage("");
+      if (lastTestCompare && typeof lastTestCompare === "object") {
+        renderTestCompareTable(lastTestCompare);
+      } else {
+        const raw = oa.compare != null ? String(oa.compare).trim() : "";
+        if (raw && raw.charAt(0) === "{") {
+          try {
+            renderTestCompareTable(JSON.parse(raw));
+          } catch (e) {
+            renderTestCompareTable(null);
+          }
+        } else {
+          renderTestCompareTable(null);
+        }
+      }
+      setTestPairIdBadge(resolvedPairId);
+      autosizeTestQuestion();
     }
 
     async function loadTestFavorites() {
@@ -3790,6 +4480,24 @@
       } catch (e) { el.textContent = String(e); }
     }
 
+    async function resetMainChatProfileUi() {
+      const el = $("mainChatProfileOut");
+      const btn = $("btnResetMainChatProfile");
+      if (btn) btn.disabled = true;
+      try {
+        const r = await fetch(apiPath("/v1/rag-test/main-chat-profile"), { method: "DELETE", headers: headers(true) });
+        const t = await r.text();
+        if (!r.ok) throw new Error(t);
+        await loadMainChatProfileUi();
+        if (el) el.textContent = "Сброшено.\n" + (el.textContent || "");
+      } catch (e) {
+        if (el) el.textContent = String(e);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    if ($("btnResetMainChatProfile")) $("btnResetMainChatProfile").onclick = () => { resetMainChatProfileUi(); };
+
     /** Пишет overrides в БД (rag_runtime_settings) через API; чат и GET main-chat-profile читают оттуда. localStorage не дублирует — только превью в «Настройки». */
     async function applyTestProfileToChat(side) {
       const letter = side === "B" ? "B" : "A";
@@ -3889,6 +4597,35 @@
       const o = getRagScopeObject();
       if (o.all) localStorage.setItem(ragScopeStore, JSON.stringify({ all: true }));
       else localStorage.setItem(ragScopeStore, JSON.stringify({ ids: o.ids }));
+    }
+
+    /** После DnD документа из fromCid → toCid: подменить выбранные разделы в RAG чата, чтобы не искать в пустой коллекции. */
+    function ragScopeNoteDocumentMoved(fromCid, toCid) {
+      if (!fromCid || !toCid || fromCid === toCid) return;
+      if (ragScope.all) return;
+      const ids = ragScope.ids || [];
+      if (!ids.length) return;
+      let changed = false;
+      const next = ids.map((id) => {
+        if (id === fromCid) {
+          changed = true;
+          return toCid;
+        }
+        return id;
+      });
+      if (!changed) return;
+      const dedup = [];
+      const seen = new Set();
+      for (const id of next) {
+        if (!collections.some((c) => c.id === id)) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        dedup.push(id);
+      }
+      ragScope = { all: false, ids: dedup.length ? dedup : [toCid] };
+      saveRagScope();
+      buildRagScopeUi();
+      onRagScopeChanged();
     }
 
     function canUseChatRag() {
@@ -4273,12 +5010,26 @@
         meta.textContent = m.role === "user" ? "Вы" : "Ассистент";
         const bubble = document.createElement("div");
         bubble.className = "msg-bubble";
-        bubble.textContent = m.content || "";
+        if (m.role === "assistant" && m._pending) {
+          bubble.classList.add("msg-bubble-pending");
+          const sp = document.createElement("span");
+          sp.className = "spin";
+          sp.setAttribute("aria-hidden", "true");
+          const lab = document.createElement("span");
+          lab.textContent = "Думаю…";
+          bubble.appendChild(sp);
+          bubble.appendChild(lab);
+        } else if (m.role === "assistant" && m._error) {
+          bubble.classList.add("msg-bubble-error");
+          bubble.textContent = m.content || "Ошибка";
+        } else {
+          bubble.textContent = m.content || "";
+        }
         wrap.appendChild(meta);
         wrap.appendChild(bubble);
         const parsed = parseCitations(m.citations);
         const n = Array.isArray(m.citations) ? m.citations.length : parsed.length;
-        if (m.role === "assistant" && n) {
+        if (m.role === "assistant" && n && !m._pending && !m._error) {
           const det = document.createElement("details");
           det.className = "citations-block";
           const summ = document.createElement("summary");
@@ -4297,6 +5048,7 @@
       ul.innerHTML = "";
       if (!canUseChatRag()) {
         $("btnNewChat").disabled = true;
+        chatMessagesSnapshot = [];
         renderMessages([]);
         return;
       }
@@ -4364,9 +5116,13 @@
           ul.appendChild(li);
         }
         if (activeThreadId) await loadMessages();
-        else renderMessages([]);
+        else {
+          chatMessagesSnapshot = [];
+          renderMessages([]);
+        }
       } catch (e) {
         showHead(String(e), false);
+        chatMessagesSnapshot = [];
         renderMessages([]);
       }
     }
@@ -4379,6 +5135,7 @@
 
     async function loadMessages() {
       if (!activeThreadId) {
+        chatMessagesSnapshot = [];
         renderMessages([]);
         return;
       }
@@ -4386,9 +5143,11 @@
         const r = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(activeThreadId) + "/messages"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const msgs = await r.json();
+        chatMessagesSnapshot = msgs.map((row) => ({ ...row }));
         renderMessages(msgs);
       } catch (e) {
         showHead(String(e), false);
+        chatMessagesSnapshot = [];
         renderMessages([]);
       }
     }
@@ -4432,7 +5191,7 @@
 
     const chatLoader = $("chatLoaderWrap");
     function setChatLoading(on) {
-      chatLoader.classList.toggle("visible", on);
+      chatLoader.classList.toggle("visible", false);
       $("btnChat").disabled = on;
     }
 
@@ -4441,8 +5200,15 @@
       if (!msg) return;
       if (!canUseChatRag()) { showHead("Выберите раздел(ы) для RAG или создайте раздел.", false); return; }
       if (!activeThreadId) { showHead("Создайте или выберите чат.", false); return; }
-      setChatLoading(true);
       $("chatIn").value = "";
+      autosizeChatInput();
+      const base = chatMessagesSnapshot.map((row) => ({ ...row }));
+      renderMessages([
+        ...base,
+        { role: "user", content: msg },
+        { role: "assistant", content: "", _pending: true },
+      ]);
+      setChatLoading(true);
       try {
         const r = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(activeThreadId) + "/messages"), {
           method: "POST",
@@ -4456,7 +5222,15 @@
         showHead("", true);
       } catch (e) {
         showHead(String(e), false);
-        await loadMessages();
+        try {
+          await loadMessages();
+        } catch (e2) {
+          renderMessages([
+            ...base,
+            { role: "user", content: msg },
+            { role: "assistant", content: String(e), _error: true },
+          ]);
+        }
       } finally {
         setChatLoading(false);
       }
@@ -4469,6 +5243,12 @@
         sendChat();
       }
     });
+    (function initChatComposerAutosize() {
+      const el = $("chatIn");
+      if (!el) return;
+      el.addEventListener("input", autosizeChatInput);
+      autosizeChatInput();
+    })();
 
     (function initRagScopeCollapse() {
       const btn = $("btnRagScopeToggle");
@@ -4489,6 +5269,12 @@
     loadCollections();
     loadTestProfiles();
     loadMainChatProfileUi();
+    (function initTestCommonQAutosize() {
+      const el = $("testCommonQ");
+      if (!el) return;
+      el.addEventListener("input", autosizeTestQuestion);
+      autosizeTestQuestion();
+    })();
   </script>
 </body>
 </html>

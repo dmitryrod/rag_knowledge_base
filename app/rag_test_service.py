@@ -10,12 +10,17 @@ from statistics import median
 from typing import Any
 
 from app.chroma_store import ChromaStore
+from app.chat_service import build_context_block, replacement_char_report
 from app.config import Settings, is_polza_model_allowlisted
 from app import llm as llm_mod
 from app.rag_profile import JsonMode, RagRuntimeProfile, RagScopeIn
 from app.rag_filters import filter_chunks_by_distance
 from app.rag_runtime import DEFAULT_SYSTEM_PROMPT, merge_settings_with_profile
-from app.rag_scope import RAG_ALL_PLACEHOLDER_ID, normalize_id_list
+from app.rag_scope import (
+    RAG_ALL_PLACEHOLDER_ID,
+    expand_collection_ids_with_subtrees,
+    normalize_id_list,
+)
 from app.db_sqlite import MetadataDB
 
 _log = logging.getLogger(__name__)
@@ -24,13 +29,19 @@ _log = logging.getLogger(__name__)
 def _scope_to_collection_ids(db: MetadataDB, scope: RagScopeIn) -> tuple[list[str], dict[str, str]]:
     all_meta = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
     all_cids = [str(r["id"]) for r in all_meta]
+    sreal = set(all_cids)
     names = {str(r["id"]): str(r["name"]) for r in all_meta}
     if scope.all:
         tids = list(all_cids)
     else:
         raw = scope.ids or []
-        tids = normalize_id_list([str(x) for x in raw])
-        tids = [x for x in tids if x in set(all_cids)]
+        base = normalize_id_list([str(x) for x in raw])
+        base = [x for x in base if x in sreal]
+        tids = expand_collection_ids_with_subtrees(
+            base,
+            subtree_postorder=db.collection_subtree_postorder,
+            valid=sreal,
+        )
     labels = {k: names.get(k, k[:8] + "…") for k in tids}
     return tids, labels
 
@@ -84,7 +95,7 @@ def _dist_stats(chunks: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _hash_text(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8", errors="replace")).hexdigest()[:16]
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()[:16]
 
 
 def _normalize_citation_list(cites: Any) -> list[dict[str, str]]:
@@ -211,8 +222,6 @@ def run_rag_test(
             },
         }
 
-    from app.chat_service import build_context_block
-
     context = build_context_block(chunks, collection_labels=col_labels)
     system = profile.effective_system_prompt(DEFAULT_SYSTEM_PROMPT)
     user_block = f"ВОПРОС:\n{user_message}\n\nCONTEXT:\n{context}"
@@ -315,7 +324,7 @@ def run_rag_test(
     if demo_mode:
         answer_status = "no_egress_demo"
 
-    return {
+    out: dict[str, Any] = {
         "answer": answer,
         "citations": citations,
         "chunks": chunks,
@@ -340,3 +349,6 @@ def run_rag_test(
             **dist,
         },
     }
+    if debug:
+        out["debug"] = {"retrieval_encoding": replacement_char_report(chunks)}
+    return out

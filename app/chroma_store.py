@@ -109,6 +109,11 @@ class ChromaStore:
                 md = {}
             mlist.append(md)
         col_tgt = self._get(target_collection_id)
+        # Идемпотентность: повторный перенос / частичный retry не должен падать на duplicate id.
+        try:
+            self.delete_by_document(target_collection_id, document_id)
+        except Exception:
+            pass
         col_tgt.add(ids=ids, documents=dlist, metadatas=mlist)
         return len(ids)
 

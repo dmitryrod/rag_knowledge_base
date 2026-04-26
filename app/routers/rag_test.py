@@ -493,6 +493,15 @@ def main_chat_profile_get() -> dict[str, Any]:
     }
 
 
+@router.delete("/rag-test/main-chat-profile", dependencies=[Depends(require_admin)])
+def main_chat_profile_reset() -> dict[str, str]:
+    """Сбросить серверные overrides основного чата (distance_threshold, system_prompt и т.д.)."""
+    db = deps.get_db()
+    db.delete_rag_runtime_settings("main_chat")
+    db.audit("rag.profile.reset", "main_chat")
+    return {"status": "ok", "message": "Main chat runtime overrides cleared"}
+
+
 @router.post("/rag-test/apply-to-chat", dependencies=[Depends(require_admin)])
 def main_chat_apply(
     body: ApplyToChatIn,

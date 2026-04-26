@@ -12,6 +12,23 @@ from pptx import Presentation
 from pypdf import PdfReader
 
 
+def _decode_plain_text_bytes(raw: bytes) -> str:
+    """Декодирование плоского текста: сначала UTF-8 (с BOM), иначе типичные legacy (например Windows Cyrillic).
+
+    Раньше использовался ``decode(..., errors="replace")``, из‑за чего в чанках и ответах RAG
+    появлялись символы замены (U+FFFD) при неверно указанной кодировке исходного файла.
+    """
+    if not raw:
+        return ""
+    for enc in ("utf-8-sig", "utf-8"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    # Типичный случай: .txt в Windows-1251; без replace — иначе в индексе остаётся U+FFFD
+    return raw.decode("cp1251")
+
+
 def extract_text(filename: str, raw: bytes) -> str:
     """Return UTF-8 text for supported formats; raises ValueError if unsupported."""
     ext = Path(filename).suffix.lower()
@@ -26,7 +43,7 @@ def extract_text(filename: str, raw: bytes) -> str:
     if ext in {".html", ".htm"}:
         return _html(raw)
     if ext in {".txt", ".md", ".csv"}:
-        return raw.decode("utf-8", errors="replace")
+        return _decode_plain_text_bytes(raw)
     raise ValueError(f"Unsupported extension: {ext}")
 
 
@@ -92,5 +109,6 @@ def _xlsx(raw: bytes) -> str:
 
 
 def _html(raw: bytes) -> str:
-    soup = BeautifulSoup(raw, "lxml")
+    html_str = _decode_plain_text_bytes(raw)
+    soup = BeautifulSoup(html_str, "lxml")
     return soup.get_text("\n", strip=True)

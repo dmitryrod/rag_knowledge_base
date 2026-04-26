@@ -5,10 +5,13 @@ from __future__ import annotations
 import io
 import json
 from collections.abc import Generator
+from importlib import reload
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.llm_types import LlmCompletionResult
 
 
 @pytest.fixture
@@ -114,6 +117,84 @@ def test_rag_test_compare_persists_pair(client: TestClient) -> None:
     assert data["left"] and data["right"]
 
 
+def test_rag_test_run_and_compare_preserve_utf8_no_replacement_char(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Регрессия: ответы A/B без U+FFFD при валидном UTF-8 от LLM."""
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.delenv("APP_API_KEY", raising=False)
+    monkeypatch.delenv("APP_ADMIN_KEY", raising=False)
+    monkeypatch.delenv("APP_MEMBER_KEY", raising=False)
+    monkeypatch.setenv("ALLOW_LLM_EGRESS", "true")
+    monkeypatch.setenv("POLZA_API_KEY", "k")
+    monkeypatch.setenv("POLZA_BASE_URL", "https://polza.ai/api/v1")
+    monkeypatch.delenv("POLZA_CHAT_MODEL_ALLOWLIST", raising=False)
+
+    import app.config
+    import app.llm
+    import app.routers.rag_test
+    import app.main
+
+    reload(app.config)
+    reload(app.llm)
+    reload(app.routers.rag_test)
+    reload(app.main)
+
+    payload = {
+        "answer": (
+            "ФСФ устойчива к увлажнению. ФБ — высокая твердостью и прочность, фанера разных сортов."
+        ),
+        "citations": [],
+    }
+
+    def _fake_llm(*_a: object, **_k: object) -> LlmCompletionResult:
+        return LlmCompletionResult(
+            content=json.dumps(payload, ensure_ascii=False),
+            model="test-model",
+            provider="test",
+        )
+
+    monkeypatch.setattr("app.llm.chat_completion_with_result", _fake_llm)
+
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        cid = _with_doc(client)
+        run = client.post(
+            "/v1/rag-test/run",
+            json={
+                "question": "что такое фанера?",
+                "scope": {"ids": [cid]},
+                "profile": {"retrieval_top_k": 4, "llm_enabled": True, "temperature": 0},
+                "debug": True,
+            },
+        )
+        assert run.status_code == 200, run.text
+        data = run.json()
+        ans = data.get("answer") or ""
+        assert "\ufffd" not in ans
+        assert "твердостью" in ans
+        assert "debug" in data
+        assert data["debug"]["retrieval_encoding"]["count"] == 0
+
+        cmp = client.post(
+            "/v1/rag-test/compare",
+            json={
+                "question": "фанера сорта?",
+                "scope": {"ids": [cid]},
+                "left_profile": {"retrieval_top_k": 3, "llm_enabled": True},
+                "right_profile": {"retrieval_top_k": 5, "llm_enabled": True},
+                "debug": False,
+            },
+        )
+        assert cmp.status_code == 200, cmp.text
+        pair = cmp.json()
+        for side in ("left", "right"):
+            a = (pair[side].get("answer") or "") if pair.get(side) else ""
+            assert "\ufffd" not in a
+            assert "твердостью" in a
+
+
 def test_apply_to_chat_requires_admin_by_default(client: TestClient) -> None:
     r = client.post(
         "/v1/rag-test/apply-to-chat",
@@ -128,6 +209,28 @@ def test_main_chat_profile_get(client: TestClient) -> None:
     assert r.status_code == 200
     j = r.json()
     assert "profile" in j
+
+
+def test_main_chat_profile_reset_after_apply(client: TestClient) -> None:
+    app = client.post(
+        "/v1/rag-test/apply-to-chat",
+        json={
+            "profile": {
+                "retrieval_top_k": 7,
+                "llm_enabled": True,
+                "distance_threshold": 0.42,
+                "system_prompt": "test override prompt",
+            }
+        },
+    )
+    assert app.status_code == 200, app.text
+    g = client.get("/v1/rag-test/main-chat-profile")
+    assert g.status_code == 200
+    assert g.json().get("profile") is not None
+    d = client.delete("/v1/rag-test/main-chat-profile")
+    assert d.status_code == 200, d.text
+    g2 = client.get("/v1/rag-test/main-chat-profile")
+    assert g2.json().get("profile") is None
 
 
 def test_rag_test_favorite_crud_json_files(client: TestClient, tmp_path: Path) -> None:

@@ -756,6 +756,13 @@ class MetadataDB:
             )
             conn.commit()
 
+    def delete_rag_runtime_settings(self, setting_id: str = "main_chat") -> bool:
+        """Удалить сохранённые overrides основного чата (A/B → apply-to-chat)."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM rag_runtime_settings WHERE id = ?", (setting_id,))
+            conn.commit()
+            return cur.rowcount > 0
+
     def list_rag_test_profiles(self, kind: str | None = None) -> list[dict[str, Any]]:
         with self._connect() as conn:
             if kind:

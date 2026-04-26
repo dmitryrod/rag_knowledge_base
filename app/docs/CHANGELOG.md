@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## 2026-04-26 (RAG scope / чат)
+
+### Changed
+
+- **Веб-админка, «Настройки»:** переключатель отладки вместо чекбокса; убрана карточка-переход «Тесты качества RAG» (вкладка **«Тесты»** и A/B по-прежнему в шапке). Добавлен выбор цветовой схемы (тёмная / светлая / синяя / розовая / серая): `data-theme` на `<html>`, токены в CSS, сохранение в `localStorage` (`knowledge_theme`) (`app/static/index.html`).
+- **Веб-админка, тема «Серая»:** палитра поверхностей и акцентов ещё раз осветнена; границы и вторичный текст чуть мягче для менее «угольного» вида (`app/static/index.html`).
+- **Веб-админка, тема «Розовая»:** фоновые токены светлее, акцент и контейнеры — пастельный тусклый розовый (согласованы `--primary*`, границы, focus) (`app/static/index.html`).
+- **Веб-админка, вкладка «Чат»:** после отправки сообщение пользователя сразу попадает в историю; до ответа LLM показывается плейсхолдер ассистента («Думаю…»); по успеху или ошибке лента обновляется с сервера (`app/static/index.html`).
+- **Веб-админка, вкладка «Тесты»:** после «Сравнить A/B» результат показывается **таблицей** (параметр, колонки A/B, вывод: дельты для чисел, «только в A/B», краткий текст ответа без простыни JSON); полный ответ `POST /v1/rag-test/compare` по-прежнему в свёрнутом блоке «Показать raw JSON». Восстановление из избранного подхватывает `run_meta.last_compare` или парсит сохранённую строку JSON (`app/static/index.html`).
+- **Веб-админка, вкладка «Тесты»:** таблица результата A/B **без** `max-height` и без внутренней вертикальной прокрутки — высота по контенту, страница удлиняется; при узком экране у обёртки остаётся только горизонтальный скролл (`app/static/index.html`).
+- **Веб-админка, вкладка «Тесты»:** в таблице A/B поле `answer` выводится **полностью** (без обрезки `…`); для колонок A/B включены переносы строк и разбиение длинных слов (`app/static/index.html`).
+- **Веб-админка, вкладка «Тесты»:** `pair_id` после «Сравнить A/B» показывается **один раз** справа над блоком «Ответ A / Ответ B», а не внутри карточек; при прогоне только A/B бейдж сбрасывается; при загрузке избранного — из `run_meta.last_compare` или из сохранённого JSON сравнения (`app/static/index.html`).
+- **Метрики RAG-тестов:** `answer_hash` и `citation_set_hash` считаются через строгий `encode("utf-8")` без `errors="replace"` — `app/rag_test_service.py`.
+
+### Fixed
+
+- **Веб-админка, вкладка «Тесты»:** уменьшен верхний `padding` у `#view-tests .view-inner--tests` (заголовок «A/B-тесты» ближе к `.topbar`); остальные отступы и карточки не трогались (`app/static/index.html`).
+
+- **Веб-админка, вкладка «Чат»:** уменьшен верхний зазор до блока «Выбор документов» — у `#headStatus` убраны дефолтный margin у `<p>` и лишний `min-height` в пустом состоянии (`.head-status:not(:empty)` оставляет полосу при показе статуса) (`app/static/index.html`).
+
+- **Веб-админка, лейаут:** высота заголовка левой колонки (`.sidebar-head`) выровнена с верхней панелью вкладок (`.topbar`, `--top-h`), чтобы убрать «ступень» на стыке сайдбара и контента на всех вкладках (`app/static/index.html`).
+
+- **Веб-админка, шапка:** вкладки «Документы / Чат / Тесты» — явное выделение **активной** вкладки без наведения; hover **неактивных** визуально отличается (внутренняя кайма, без «пилюли» как у выбранной); `aria-selected` синхронизируется в `setView` (`app/static/index.html`).
+
+- **Ingest (`.txt` / `.md` / `.csv` / `.html`):** плоский текст сначала декодируется как UTF-8 (включая BOM); при невалидном UTF-8 — **Windows-1251**, без `errors="replace"`, чтобы в чанках Chroma и в ответах RAG (в т.ч. на вкладке «Тесты») не появлялись символы замены U+FFFD (`��`) из‑за исходников в Windows-1251 вместо UTF-8. Уже проиндексированные чанки с битыми символами нужно **перезалить** документ.
+- **RAG чат и тесты:** выбранный раздел (и явный список разделов) **раскрывается на все подразделы** в SQLite — поиск в Chroma идёт по объединённому списку коллекций; исправляет «не найдено», когда документ лежит во вложенной папке, а в UI отмечен только родитель (`app/rag_scope.py`, `app/routers/api.py`, `app/rag_test_service.py`).
+- **Перенос документов в Chroma:** перед `add` в целевую коллекцию удаляются чанки этого `document_id` в цели — повторное копирование не удваивает векторы (`app/chroma_store.py`).
+- **Чат + LLM:** если модель отвечает «не найдено» с пустыми `citations`, но retrieval лексически совпадает с вопросом (например `фанера` / `фанеры`, `сорта`), чат возвращает локальный extractive fallback с цитатами; нерелевантный top-k по-прежнему не маскируется (`app/chat_service.py`).
+- **Debug:** при `X-Debug: 1` в теле ответа чата опционально поле `debug` (`collection_ids`, счётчики, превью чанков, distance и **`retrieval_encoding`** — чанки retrieval с U+FFFD в тексте, см. `replacement_char_report` в `app/chat_service.py`).
+
+### Added
+
+- **RAG-тесты / отладка:** при `debug: true` в `POST /v1/rag-test/run` в ответе добавляется `debug.retrieval_encoding` (та же семантика, что у чата) — `app/rag_test_service.py`.
+- **Регрессия UTF-8:** сохранение русского текста без U+FFFD по цепочке LLM → SQLite → `GET /v1/chat/threads/.../messages` — `app/tests/test_api.py::test_chat_thread_messages_preserve_utf8_no_replacement_char`; прогон «Тесты» + A/B с моком LLM — `app/tests/test_rag_test_api.py::test_rag_test_run_and_compare_preserve_utf8_no_replacement_char`; unit-тесты отчёта по чанкам — `app/tests/test_chat_service.py` (`replacement_char_report`).
+- **API:** `DELETE /v1/rag-test/main-chat-profile` — сброс серверных overrides основного чата (`app/routers/rag_test.py`, `app/db_sqlite.py::delete_rag_runtime_settings`).
+- **Веб-админка:** кнопка «Сбросить overrides чата» в настройках; после DnD документа **обновляется** `knowledge_rag_scope` (подмена старого `collection_id` на новый в выбранных разделах) (`app/static/index.html`).
+
 ## 2026-04-26
 
 ### Changed
@@ -25,7 +62,7 @@
 
 ### Added
 
-- **Документы (веб + API):** в SQLite у разделов (`collections`) поле `parent_id` (миграция при старте); дерево разделов и документов одним запросом `GET /v1/collections/tree`; агрегированная статистика хранилища `GET /v1/knowledge/stats` (числа сущностей SQLite, размеры `metadata.db`, каталога Chroma, `APP_DATA_DIR`, чанки/эмбеддинги в Chroma); `PATCH /v1/collections/{id}` (имя, родитель), `PATCH /v1/collections/{id}/documents/{doc_id}` (переименование файла в метаданных + Chroma); **`POST /v1/collections/{target_collection_id}/documents/{document_id}/move`** с телом `{ "source_collection_id": "..." }` — перенос документа между разделами (копия чанков в Chroma в целевую коллекция, затем обновление `documents.collection_id` в SQLite, удаление чанков из исходной коллекции; при `source === target` — no-op); `POST /v1/collections` принимает опциональный `parent_id`; `DELETE /v1/collections/{id}` удаляет поддерево разделов (рекурсия: Chroma + строки БД). Веб-админка: дерево в левом баре на вкладке «Документы», **DnD** (только за handle `⋮⋮`) — перенос разделов (`PATCH` родителя) и документов (`.../move`), зона «Корень» для вывода раздела в корень; сохраняемый порядок соседей **не** хранится (нет `sort_order`), индикаторы above/below/inside лишь задают целевой раздел/родителя; карточки статистики, экран раздела (подразделы, список файлов, загрузка) и экран документа (метаданные, переименование/удаление).
+- **Документы (веб + API):** в SQLite у разделов (`collections`) поле `parent_id` (миграция при старте); дерево разделов и документов одним запросом `GET /v1/collections/tree`; агрегированная статистика хранилища `GET /v1/knowledge/stats` (числа сущностей SQLite, размеры `metadata.db`, каталога Chroma, `APP_DATA_DIR`, чанки/эмбеддинги в Chroma); `PATCH /v1/collections/{id}` (имя, родитель), `PATCH /v1/collections/{id}/documents/{doc_id}` (переименование файла в метаданных + Chroma); **`POST /v1/collections/{target_collection_id}/documents/{document_id}/move`** с телом `{ "source_collection_id": "..." }` — перенос документа между разделами (копия чанков в Chroma в целевую коллекцию, затем обновление `documents.collection_id` в SQLite, удаление чанков из исходной коллекции; при `source === target` — no-op); `POST /v1/collections` принимает опциональный `parent_id`; `DELETE /v1/collections/{id}` удаляет поддерево разделов (рекурсия: Chroma + строки БД). Веб-админка: дерево в левом баре на вкладке «Документы», **DnD** (только за handle `⋮⋮`) — перенос разделов (`PATCH` родителя) и документов (`.../move`), зона «Корень» для вывода раздела в корень; сохраняемый порядок соседей **не** хранится (нет `sort_order`), индикаторы above/below/inside лишь задают целевой раздел/родителя; карточки статистики, экран раздела (подразделы, список файлов, загрузка) и экран документа (метаданные, переименование/удаление).
 - **Избранные A/B тесты:** каталог `APP_DATA_DIR/tests_favorite/` — JSON-файлы `T000001.json`, …; API `GET/POST /v1/rag-test/favorites`, `GET/DELETE /v1/rag-test/favorites/{id}` (id вида `T` + 6 цифр). Веб-вкладка «Тесты»: кнопка **★ Favorite**, список избранного в левом баре, восстановление слепка и удаление (файл + строка в UI).
 - **Тесты RAG (веб):** форма полей `RagRuntimeProfile` (подсказки в `title`), общий блок **«Источники для теста»** (все разделы / выбранные разделы / выбор документов с `document_ids_by_collection`); импорт/экспорт/сохранение профилей по-прежнему как JSON в `localStorage`. Scope тестов независим от области RAG на вкладке «Чат» (`localStorage`: `knowledge_test_scope`).
 - **Тесты RAG (A/B):** веб-вкладка «Тесты», API префикс `/v1/rag-test/`: `run`, `compare`, CRUD `profiles`, `main-chat-profile`, `apply-to-chat` (только admin); сохранение прогонов в SQLite (`rag_test_runs`, `rag_test_run_pairs`, `rag_runtime_settings` и др.). `Polza` chat completions: `chat_completion_with_result` возвращает `model` / `provider` / `usage` для диагностики. Основной чат читает safe runtime-overrides из `rag_runtime_settings` (retrieval top-k, temperature, system prompt, distance threshold и т.д.).
@@ -64,7 +101,7 @@
 
 ### Added
 
-- Режим отладки: заголовок `X-Debug: 1` (чекбокс «Debug» в Настройках веб-админки) — `POST /v1/.../chat` пишет на сервер шаги RAG/LLM; при 500 в теле ответа (если `APP_ALLOW_CLIENT_DEBUG` не отключён) — `detail` с `error`, `type`, `trace`. Логи `app`/`app.chat_service` в консоли; `APP_ALLOW_CLIENT_DEBUG` в `app/config.py`, `.env.example`. Audit при сбое логируется, ответ чата не теряется.
+- Режим отладки: заголовок `X-Debug: 1` (переключатель в **Настройках** веб-админки) — `POST /v1/.../chat` пишет на сервер шаги RAG/LLM; при 500 в теле ответа (если `APP_ALLOW_CLIENT_DEBUG` не отключён) — `detail` с `error`, `type`, `trace`. Логи `app`/`app.chat_service` в консоли; `APP_ALLOW_CLIENT_DEBUG` в `app/config.py`, `.env.example`. Audit при сбое логируется, ответ чата не теряется.
 - Локальный кэш дистрибутивов: каталог `local-dist/` (в `.gitignore`) — `scripts/refresh-local-dist.ps1` скачивает в `local-dist/wheels` актуальные pip/setuptools/wheel и зависимости из `pyproject.toml` (перезапись при обновлении); `-IncludeDockerBase` сохраняет tar базового образа в `local-dist/docker` для `docker load` без Docker Hub. `scripts/refresh-wheels-in-linux-container.ps1` — wheels для **linux**-образа (актуально с Windows + `Dockerfile.wheels`). `scripts/docker-load-base-image-from-cache.ps1` — загрузка сохранённого tar. `scripts/pip-install-editable.ps1` — флаги `-UseLocalDist` и `-TryOnlineFirst`. `Dockerfile.wheels` + `docker-compose.wheels.yml` — сборка образа без PyPI, только из `local-dist/wheels`.
 - `scripts/docker-ensure-base-image.ps1` — перед сборкой: локальный `FROM` или `docker load` из tar (обход `context deadline exceeded` к Docker Hub). `scripts/compose-up.ps1` — обёртка над `docker compose up --build` после `docker-ensure-base-image`.
 - `GET /v1/health`: поле `auth_configured` (true, если задан любой из `APP_API_KEY` / `APP_ADMIN_KEY` / `APP_MEMBER_KEY`) — публичный сигнал для веб-админки; без ключей (dev) — `false`.
@@ -81,7 +118,7 @@
 
 ### Fixed
 
-- `chat_service.run_chat`: при удалённой LLM и ответе «НЕ НАЙДЕНО» с пустыми `citations` теперь подставляются цитаты из retrieval (как в режиме без egress). System-prompt: не злоупотреблять «НЕ НАЙДЕНО», если фрагменты релевантны.
+- `chat_service.run_chat`: при удалённой LLM и ответе «НЕ НАЙДЕНО» с пустыми `citations` локальный fallback добавляет ответ и цитаты только для лексически релевантного retrieval; нерелевантный top-k не маскируется цитатами. System-prompt: не злоупотреблять «НЕ НАЙДЕНО», если фрагменты релевантны.
 
 ### Added
 

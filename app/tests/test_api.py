@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from collections.abc import Generator
 
 import pytest
@@ -53,25 +54,39 @@ def test_root_serves_admin_ui(client: TestClient) -> None:
     assert "Knowledge" in r.text
     assert "Документы" in r.text
     assert "Тесты" in r.text
+    assert 'id="tabChat" role="tab" aria-selected="true"' in r.text
+    assert 'id="tabDocs" role="tab" aria-selected="false"' in r.text
+    assert "b.setAttribute(\"aria-selected\"" in r.text
     assert "view-chat" in r.text
     assert "view-tests" in r.text
     assert 'id="testScopeMount"' in r.text
     assert 'id="profileFormA"' in r.text
     assert "Источники для теста" in r.text
-    assert "Тесты RAG" in r.text
+    assert 'id="view-settings"' in r.text
+    assert 'id="uiTheme"' in r.text
+    assert "knowledge_theme" in r.text
+    assert 'data-theme="dark"' in r.text
     assert 'id="testRunLoader"' in r.text
     assert 'id="testActionStatus"' in r.text
     assert "setTestActionStatus" in r.text
     assert "setTestRunLoading" in r.text
     assert 'id="btnApplyProfileA"' in r.text
     assert 'id="btnApplyProfileB"' in r.text
+    assert 'id="btnResetMainChatProfile"' in r.text
     assert "applyTestProfileToChat" in r.text
     assert "retrieval_top_k" in r.text
     assert 'title="Сколько top chunks' in r.text
     assert 'id="chat-thread-list"' in r.text
     assert 'id="message-composer"' in r.text
+    assert "chatMessagesSnapshot" in r.text
     assert "window.__API_BASE__" in r.text
     assert "function apiPath" in r.text
+    assert "max-height: calc(1.45em * 12)" in r.text
+    assert "function autosizeTestQuestion" in r.text
+    assert "initTestCommonQAutosize" in r.text
+    assert "function autosizeChatInput" in r.text
+    assert "initChatComposerAutosize" in r.text
+    assert "scrollHeight" in r.text
 
 
 def test_cors_allows_preflight_for_health(client: TestClient) -> None:
@@ -227,6 +242,77 @@ def test_chat_threads_flow(client: TestClient) -> None:
     assert dl.status_code == 200
     gone = client.get(f"/v1/chat/threads/{tid}/messages")
     assert gone.status_code == 404
+
+
+def test_chat_thread_messages_preserve_utf8_no_replacement_char(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ответ LLM и история в SQLite не должны портить русский UTF-8 (регрессия U+FFFD)."""
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.delenv("APP_API_KEY", raising=False)
+    monkeypatch.delenv("APP_ADMIN_KEY", raising=False)
+    monkeypatch.delenv("APP_MEMBER_KEY", raising=False)
+    monkeypatch.setenv("POLZA_API_KEY", "k")
+    monkeypatch.setenv("ALLOW_LLM_EGRESS", "true")
+    monkeypatch.setenv("POLZA_BASE_URL", "https://polza.ai/api/v1")
+    monkeypatch.delenv("POLZA_CHAT_MODEL_ALLOWLIST", raising=False)
+    from importlib import reload
+
+    import app.config
+    import app.llm
+    import app.routers.api
+    import app.main
+
+    reload(app.config)
+    reload(app.llm)
+    reload(app.routers.api)
+    reload(app.main)
+
+    llm_answer = {
+        "answer": (
+            "ФСФ — прочная и устойчива к увлажнению. "
+            "ФБ (бакелизированная фанера) — высокая прочность и твердостью благодаря смолам."
+        ),
+        "citations": [{"chunk_id": "stub", "quote": "цитата"}],
+    }
+
+    def _fake_llm(_settings: object, _messages: list[dict[str, str]]) -> str:
+        return json.dumps(llm_answer, ensure_ascii=False)
+
+    monkeypatch.setattr("app.llm.chat_completion", _fake_llm)
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        r = client.post("/v1/collections", json={"name": "utf8-thread"})
+        assert r.status_code == 200
+        cid = r.json()["id"]
+        raw = "Фанера: виды по клею и влагостойкость увлажнению.".encode("utf-8")
+        up = client.post(
+            f"/v1/collections/{cid}/documents",
+            files={"file": ("fanera.txt", io.BytesIO(raw), "text/plain")},
+        )
+        assert up.status_code == 200
+        tr = client.post("/v1/chat/threads", json={"collection_id": cid, "title": "U1"})
+        assert tr.status_code == 200
+        tid = tr.json()["id"]
+        msg = client.post(
+            f"/v1/chat/threads/{tid}/messages",
+            json={"message": "Какие виды фанеры?"},
+        )
+        assert msg.status_code == 200
+        body = msg.json()
+        ans = body.get("answer") or ""
+        assert "\ufffd" not in ans
+        assert "твердостью" in ans
+        assert "увлажнению" in ans or "фанера" in ans.lower()
+
+        hist = client.get(f"/v1/chat/threads/{tid}/messages")
+        assert hist.status_code == 200
+        rows = hist.json()
+        asst = next(m for m in rows if m["role"] == "assistant")
+        content = asst.get("content") or ""
+        assert "\ufffd" not in content
+        assert "твердостью" in content
 
 
 def test_member_can_chat_threads(client_rbac: TestClient) -> None:
@@ -590,3 +676,112 @@ def test_member_forbidden_move_document(client_rbac: TestClient) -> None:
         headers={"X-API-Key": "mem-secret"},
     )
     assert mv.status_code == 403
+
+
+def test_chat_rag_parent_scope_finds_document_in_child_section(client: TestClient) -> None:
+    """Выбор родительского раздела в RAG включает Chroma всех подразделов."""
+    parent = client.post("/v1/collections", json={"name": "parent-rag"}).json()["id"]
+    child = client.post(
+        "/v1/collections",
+        json={"name": "child-rag", "parent_id": parent},
+    ).json()["id"]
+    # Текст на латинице + keyword fanera — чтобы файл теста оставался ASCII-only.
+    raw = (b"plywood birch marine grades sorts fanera types sheet " * 15)
+    up = client.post(
+        f"/v1/collections/{child}/documents",
+        files={"file": ("fanera.txt", io.BytesIO(raw), "text/plain")},
+    )
+    assert up.status_code == 200
+    tr = client.post("/v1/chat/threads", json={"title": "t", "rag": {"ids": [parent]}})
+    assert tr.status_code == 200
+    tid = tr.json()["id"]
+    msg = client.post(
+        f"/v1/chat/threads/{tid}/messages",
+        json={"message": "Какие виды или сорта фанеры в документе?"},
+    )
+    assert msg.status_code == 200
+    data = msg.json()
+    assert data["chunks_considered"] >= 1
+    cites = data.get("citations") or []
+    blob = " ".join(str(c.get("quote") or "") for c in cites).lower()
+    assert "plywood" in blob or "fanera" in blob or "birch" in blob
+
+
+def test_legacy_collection_chat_expands_child_documents(client: TestClient) -> None:
+    """POST /collections/{id}/chat ищет в поддереве раздела."""
+    parent = client.post("/v1/collections", json={"name": "p-legacy"}).json()["id"]
+    child = client.post(
+        "/v1/collections",
+        json={"name": "c-legacy", "parent_id": parent},
+    ).json()["id"]
+    raw = (b"legacy_subtree_chat_marker_alpha ") * 35
+    up = client.post(
+        f"/v1/collections/{child}/documents",
+        files={"file": ("sub.txt", io.BytesIO(raw), "text/plain")},
+    )
+    assert up.status_code == 200
+    msg = client.post(
+        f"/v1/collections/{parent}/chat",
+        json={"message": "legacy_subtree_chat_marker"},
+    )
+    assert msg.status_code == 200
+    assert msg.json()["chunks_considered"] >= 1
+
+
+def test_thread_scope_stale_after_document_move_to_other_section(client: TestClient) -> None:
+    """Тред с scope только A не видит документ после переноса A→B; новый тред с B — видит."""
+    a = client.post("/v1/collections", json={"name": "stale-a"}).json()["id"]
+    b = client.post("/v1/collections", json={"name": "stale-b"}).json()["id"]
+    raw = b"unique_stale_move_marker_zz_ " * 40
+    up = client.post(
+        f"/v1/collections/{a}/documents",
+        files={"file": ("st.txt", io.BytesIO(raw), "text/plain")},
+    )
+    assert up.status_code == 200
+    did = up.json()["id"]
+    tr_old = client.post("/v1/chat/threads", json={"title": "old", "rag": {"ids": [a]}})
+    assert tr_old.status_code == 200
+    tid_old = tr_old.json()["id"]
+    mv = client.post(
+        f"/v1/collections/{b}/documents/{did}/move",
+        json={"source_collection_id": a},
+    )
+    assert mv.status_code == 200
+    msg_old = client.post(
+        f"/v1/chat/threads/{tid_old}/messages",
+        json={"message": "unique_stale_move_marker_zz"},
+    )
+    assert msg_old.status_code == 200
+    assert msg_old.json()["chunks_considered"] == 0
+    tr_new = client.post("/v1/chat/threads", json={"title": "new", "rag": {"ids": [b]}})
+    tid_new = tr_new.json()["id"]
+    msg_new = client.post(
+        f"/v1/chat/threads/{tid_new}/messages",
+        json={"message": "unique_stale_move_marker_zz"},
+    )
+    assert msg_new.status_code == 200
+    assert msg_new.json()["chunks_considered"] >= 1
+
+
+def test_copy_document_vectors_idempotent_no_duplicate_chunks(client: TestClient) -> None:
+    """Повторное копирование векторов в целевой раздел не удваивает число чанков."""
+    from app import deps
+
+    a = client.post("/v1/collections", json={"name": "idemp-a"}).json()["id"]
+    b = client.post("/v1/collections", json={"name": "idemp-b"}).json()["id"]
+    raw = b"idempotent chunk text pad " * 40
+    up = client.post(
+        f"/v1/collections/{a}/documents",
+        files={"file": ("i.txt", io.BytesIO(raw), "text/plain")},
+    )
+    assert up.status_code == 200
+    did = up.json()["id"]
+    store = deps.get_chroma()
+    n_a = store.count_chunks_for_document(a, did)
+    assert n_a >= 1
+    n_first = store.copy_document_vectors_to_collection(a, b, did)
+    assert n_first == n_a
+    assert store.count_chunks_for_document(b, did) == n_a
+    n_second = store.copy_document_vectors_to_collection(a, b, did)
+    assert n_second == n_a
+    assert store.count_chunks_for_document(b, did) == n_a

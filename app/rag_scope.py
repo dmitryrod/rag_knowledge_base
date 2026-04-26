@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 # Служебная «коллекция» в SQLite для потоков «по всем разделам» (FK + список тредов).
@@ -87,3 +88,26 @@ def collection_ids_for_retrieval(
     if collection_id and collection_id != RAG_ALL_PLACEHOLDER_ID and collection_id in sreal:
         return [collection_id]
     return []
+
+
+def expand_collection_ids_with_subtrees(
+    root_ids: list[str],
+    *,
+    subtree_postorder: Callable[[str], list[str]],
+    valid: set[str],
+) -> list[str]:
+    """Раскрыть каждый выбранный раздел до всех подразделов (дерево SQLite).
+
+    Документы лежат в Chroma коллекции своего раздела; выбор только родителя без детей
+    не находил бы файлы во вложенных папках.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for rid in root_ids:
+        if rid not in valid:
+            continue
+        for cid in subtree_postorder(rid):
+            if cid in valid and cid not in seen:
+                seen.add(cid)
+                out.append(cid)
+    return out

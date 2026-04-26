@@ -26,6 +26,7 @@ from app.rag_runtime import main_chat_effective_settings
 from app.rag_scope import (
     RAG_ALL_PLACEHOLDER_ID,
     collection_ids_for_retrieval,
+    expand_collection_ids_with_subtrees,
     normalize_id_list,
     parse_rag_scope_json,
     thread_matches_rag,
@@ -121,6 +122,7 @@ class ChatOut(BaseModel):
     citations: list[dict]
     chunks_considered: int
     demo_mode: bool | None = None
+    debug: dict[str, Any] | None = None
 
 
 class ChatThreadCreate(BaseModel):
@@ -254,11 +256,39 @@ def _retrieval_ids_and_labels(
         rscope = parse_rag_scope_json(str(thread_row.get("rag_scope_json") or ""))
     all_meta = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
     all_cids = [str(r["id"]) for r in all_meta]
+    sreal = set(all_cids)
     names = {str(r["id"]): str(r["name"]) for r in all_meta}
-    tids = collection_ids_for_retrieval(
+    base_tids = collection_ids_for_retrieval(
         all_cids,
         collection_id=str(thread_row["collection_id"]),
         rag_scope=rscope,
+    )
+    if rscope and rscope.get("all") is True:
+        tids = base_tids
+    else:
+        tids = expand_collection_ids_with_subtrees(
+            base_tids,
+            subtree_postorder=db.collection_subtree_postorder,
+            valid=sreal,
+        )
+    labels = {k: names.get(k, k[:8] + "…") for k in tids}
+    return tids, labels
+
+
+def _legacy_chat_collection_ids_and_labels(
+    collection_id: str,
+) -> tuple[list[str], dict[str, str]]:
+    """POST /collections/{id}/chat: искать в разделе и во всех вложенных (как в UI-дереве)."""
+    db = deps.get_db()
+    all_meta = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
+    all_cids = [str(r["id"]) for r in all_meta]
+    sreal = set(all_cids)
+    names = {str(r["id"]): str(r["name"]) for r in all_meta}
+    base = [collection_id] if collection_id in sreal else []
+    tids = expand_collection_ids_with_subtrees(
+        base,
+        subtree_postorder=db.collection_subtree_postorder,
+        valid=sreal,
     )
     labels = {k: names.get(k, k[:8] + "…") for k in tids}
     return tids, labels
@@ -637,28 +667,29 @@ def chat(
         _check_polza_allowlist(eff)
         if not db.get_collection(collection_id):
             raise HTTPException(status_code=404, detail="Collection not found")
-        row = db.get_collection(collection_id)
-        assert row
+        cids, col_labels = _legacy_chat_collection_ids_and_labels(collection_id)
         out = run_chat(
             eff,
             deps.get_chroma(),
             body.message,
-            collection_ids=[collection_id],
-            collection_labels={collection_id: str(row["name"])},
+            collection_ids=cids,
+            collection_labels=col_labels,
             debug=client_debug,
             system_prompt_override=sys_prompt,
             distance_threshold=dist_thr,
         )
         if client_debug:
             _log.info(
-                "POST /chat: run_chat ok chunks_considered=%s demo_mode=%s",
+                "POST /chat: run_chat ok chunks_considered=%s demo_mode=%s retrieval_collections=%s",
                 out.get("chunks_considered"),
                 out.get("demo_mode"),
+                cids,
             )
         try:
             db.audit(
                 "chat.query",
-                f"collection={collection_id} len={len(body.message)} chunks={out.get('chunks_considered')}",
+                f"collection={collection_id} len={len(body.message)} chunks={out.get('chunks_considered')}"
+                + (f" retrieval_cids={cids!r}" if client_debug else ""),
             )
         except Exception:
             # Ответ RAG уже готов; audit — не best-effort для UX, но логируем (иначе 500 зря)
@@ -668,6 +699,7 @@ def chat(
             citations=list(out.get("citations") or []),
             chunks_considered=int(out.get("chunks_considered") or 0),
             demo_mode=out.get("demo_mode"),
+            debug=out.get("debug") if client_debug else None,
         )
     except HTTPException:
         raise
@@ -714,15 +746,15 @@ def chat_export(
         db = deps.get_db()
         eff, sys_prompt, dist_thr = main_chat_effective_settings(settings, db)
         _check_polza_allowlist(eff)
-        row = db.get_collection(collection_id)
-        if not row:
+        if not db.get_collection(collection_id):
             raise HTTPException(status_code=404, detail="Collection not found")
+        cids, col_labels = _legacy_chat_collection_ids_and_labels(collection_id)
         out = run_chat(
             eff,
             deps.get_chroma(),
             body.message,
-            collection_ids=[collection_id],
-            collection_labels={collection_id: str(row["name"])},
+            collection_ids=cids,
+            collection_labels=col_labels,
             system_prompt_override=sys_prompt,
             distance_threshold=dist_thr,
         )
@@ -924,7 +956,8 @@ def chat_in_thread(
         try:
             db.audit(
                 "chat.thread.message",
-                f"thread={thread_id} collections={cids!r} len={len(body.message)} chunks={out.get('chunks_considered')}",
+                f"thread={thread_id} collections={cids!r} len={len(body.message)} chunks={out.get('chunks_considered')}"
+                + (f" retrieval_collection_count={len(cids)}" if client_debug else ""),
             )
         except Exception:
             _log.exception("POST thread message: audit failed; ответ отдаётся")
@@ -933,6 +966,7 @@ def chat_in_thread(
             citations=cites,
             chunks_considered=int(out.get("chunks_considered") or 0),
             demo_mode=out.get("demo_mode"),
+            debug=out.get("debug") if client_debug else None,
         )
     except HTTPException:
         raise
