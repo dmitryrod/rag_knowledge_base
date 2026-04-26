@@ -32,6 +32,8 @@
       --radius-lg: 14px;
       --radius-xl: 18px;
       --err: #ee7d77;
+      --error-container: #7f2927;
+      --on-error-container: #ff9993;
       --ok: #3fb950;
       --ui-ease: 0.18s ease;
     }
@@ -287,18 +289,51 @@
       background: var(--surface-container-highest);
     }
     .kb-tree-icon:active { cursor: grabbing; }
-    .kb-tree-icon svg { width: 0.95rem; height: 0.95rem; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    /* События мыши — на родителе с draggable; иначе drag начинается с path/svg и dragstart не инициализирует DnD */
+    .kb-tree-icon svg { pointer-events: none; width: 0.95rem; height: 0.95rem; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
     .kb-tree-row.kb-active .kb-tree-icon { color: var(--on-surface); }
     .kb-doc-row .kb-tree-icon { opacity: 0.9; }
     .kb-tree-row.kb-drop-above { box-shadow: inset 0 3px 0 0 var(--primary); }
     .kb-tree-row.kb-drop-below { box-shadow: inset 0 -3px 0 0 var(--primary); }
     .kb-tree-row.kb-drop-inside { outline: 2px dashed var(--primary); outline-offset: -2px; }
+    .kb-tree-root-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.5rem;
+      margin-bottom: 0.3rem;
+    }
+    .kb-tree-root-bar .spin {
+      width: 0.8rem; height: 0.8rem; flex-shrink: 0; border-width: 2px;
+    }
+    .kb-tree-status-line {
+      font-size: 0.65rem; color: var(--on-surface-variant);
+      line-height: 1.25; flex: 1 1 6rem; min-width: 0;
+    }
     .kb-tree-root-drop {
-      font-size: 0.7rem; text-align: center; color: var(--on-surface-variant);
-      padding: 0.3rem 0.4rem; border-radius: var(--radius-md); margin-bottom: 0.25rem;
+      font-size: 0.7rem; text-align: left; color: var(--on-surface-variant);
+      padding: 0.25rem 0.4rem; border-radius: var(--radius-md);
       border: 1px dashed var(--ghost-border);
+      flex: 0 0 auto; max-width: 100%;
     }
     .kb-tree-root-drop.kb-drop-inside { outline: 2px solid var(--primary); background: var(--surface-container); }
+    .kb-doc-row.kb-doc-multi {
+      background: var(--surface-container);
+      box-shadow: inset 2px 0 0 0 var(--primary);
+    }
+    .kb-doc-row.kb-doc-multi.kb-active { box-shadow: inset 2px 0 0 0 var(--primary), inset 0 0 0 1px var(--ghost-border); }
+    .kb-tree-move-log {
+      font-size: 0.6rem; line-height: 1.35; color: var(--on-surface-variant);
+      max-height: 6.5rem; overflow-y: auto; margin: 0 0 0.3rem 0; padding: 0.2rem 0.25rem;
+      border: 1px solid var(--ghost-border); border-radius: var(--radius-md); background: var(--surface-container-low);
+    }
+    .kb-tree-move-log[hidden] { display: none !important; }
+    .kb-tree-move-line { display: flex; gap: 0.25rem; justify-content: space-between; margin-bottom: 0.1rem; word-break: break-all; }
+    .kb-tree-move-line .st { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+    .kb-tree-move-line.st-ok .st { color: var(--on-surface); }
+    .kb-tree-move-line.st-skip .st { color: var(--on-surface-variant); }
+    .kb-tree-move-line.st-err .st { color: #f2b8b5; }
+    .kb-tree-move-line.st-run .st { color: var(--primary); }
     .kb-stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -422,12 +457,87 @@
     }
     /* Chat layout */
     #view-chat { padding: 0; max-width: none; }
+    /* Документы: контент на всю ширину workspace (от сайдбара до правого края) */
+    #view-docs .view-inner {
+      max-width: none;
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
     #view-chat .chat-layout {
       display: flex;
       flex-direction: column;
       height: 100%;
       min-height: 0;
     }
+    #view-chat .chat-toolbar {
+      align-items: flex-start;
+    }
+    #view-chat .rag-scope-box {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: none;
+      width: auto;
+    }
+    #view-chat #chat-messages {
+      max-width: none;
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #view-chat .composer-wrap {
+      max-width: none;
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .rag-scope-head {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      width: 100%;
+      padding: 0;
+      margin: 0 0 0.35rem 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+      border-radius: var(--radius-md);
+    }
+    .rag-scope-head:hover .rag-scope-label,
+    .rag-scope-head:hover .rag-scope-chevron { color: var(--on-surface); }
+    .rag-scope-head:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    .rag-scope-head .rag-scope-label {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      font-size: 0.75rem;
+      color: var(--on-surface-variant);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .rag-scope-chevron {
+      flex-shrink: 0;
+      font-size: 0.65rem;
+      line-height: 1;
+      color: var(--on-surface-variant);
+      transition: transform 0.18s ease;
+      display: inline-block;
+    }
+    .rag-scope-box.rag-scope-collapsed .rag-scope-chevron {
+      transform: rotate(-90deg);
+    }
+    .rag-scope-panel { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+    .rag-scope-panel[hidden] { display: none !important; }
     .chat-toolbar {
       padding: 0.65rem 1.25rem;
       border-bottom: 1px solid var(--ghost-border);
@@ -457,7 +567,7 @@
       border-color: rgba(198, 198, 199, 0.45);
       box-shadow: 0 0 0 1px rgba(184, 185, 185, 0.12);
     }
-    .rag-scope-box { display: flex; flex-direction: column; gap: 0.35rem; min-width: 220px; max-width: min(100%, 440px); }
+    .rag-scope-box { display: flex; flex-direction: column; gap: 0; min-width: 220px; max-width: min(100%, 440px); }
     .rag-scope-label { font-size: 0.75rem; color: var(--on-surface-variant); margin: 0; }
     .rag-scope-mount { display: flex; flex-direction: column; gap: 0.35rem; }
     .rag-all-row { display: flex; align-items: center; gap: 0.5rem; }
@@ -1083,6 +1193,112 @@
       outline-offset: 2px;
       border-radius: 4px;
     }
+    /* Кастомные модалки (замена window.confirm / window.prompt; не использовать alert()) */
+    .app-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      background: rgba(14, 14, 14, 0.72);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+    }
+    .app-modal-panel {
+      width: min(420px, 100%);
+      max-height: min(90vh, 520px);
+      overflow: auto;
+      background: var(--surface-container-high);
+      border: 1px solid var(--ghost-border);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 24px 64px rgba(231, 229, 228, 0.04);
+      padding: 1.15rem 1.25rem 1rem;
+      color: var(--on-surface);
+      font-family: inherit;
+    }
+    .app-modal-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.65rem 0;
+      color: var(--on-surface);
+    }
+    .app-modal-message {
+      margin: 0 0 1rem 0;
+      font-size: 0.875rem;
+      line-height: 1.45;
+      color: var(--on-surface-variant);
+    }
+    .app-modal-field { margin: 0 0 1rem 0; }
+    .app-modal-field label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--on-surface-variant);
+      margin-bottom: 0.35rem;
+    }
+    .app-modal-field input {
+      width: 100%;
+      padding: 0.55rem 0.65rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--ghost-border);
+      background: var(--surface-container-low);
+      color: var(--on-surface);
+      font-family: inherit;
+      font-size: 0.875rem;
+    }
+    .app-modal-field input:focus {
+      outline: none;
+      border-color: rgba(72, 72, 72, 0.55);
+      box-shadow: 0 0 0 2px var(--focus-ring);
+    }
+    .app-modal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      margin-top: 0.25rem;
+    }
+    .app-modal-btn {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background var(--ui-ease), color var(--ui-ease), border-color var(--ui-ease), filter var(--ui-ease);
+    }
+    .app-modal-btn:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    .app-modal-btn-secondary {
+      background: var(--surface-container);
+      color: var(--on-surface);
+      border-color: var(--ghost-border);
+    }
+    .app-modal-btn-secondary:hover { background: var(--surface-container-highest); }
+    .app-modal-btn-primary {
+      background: var(--primary);
+      color: var(--on-primary);
+    }
+    .app-modal-btn-primary:hover { filter: brightness(1.06); }
+    .app-modal-btn-primary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: none;
+    }
+    .app-modal-btn-danger {
+      background: var(--error-container);
+      color: var(--on-error-container);
+      border-color: rgba(238, 125, 119, 0.35);
+    }
+    .app-modal-btn-danger:hover { filter: brightness(1.08); }
     #view-settings input[type="checkbox"] {
       width: 1rem;
       height: 1rem;
@@ -1103,10 +1319,14 @@
         <div class="sidebar-panel hidden" id="sidebar-docs-panel">
           <p class="kb-side-title">Структура</p>
           <div id="kbTreeErr" class="status err" style="font-size:0.8rem; margin-bottom:0.4rem"></div>
-          <div id="kbTreeLoader" class="status" style="font-size:0.8rem; display:none" aria-live="polite">Загрузка дерева…</div>
           <div id="kbTreeEmpty" class="sidebar-hint hidden" style="text-align:center; padding:0.75rem 0.4rem">Нет разделов. Создайте раздел в центре.</div>
           <div id="kbTreeScroll" class="kb-tree-scroll" aria-label="Дерево разделов и документов">
-            <div id="kbTreeRootDrop" class="kb-tree-root-drop" title="Перетащите сюда, чтобы сделать раздел корневым (верхний уровень)">· Корень ·</div>
+            <div class="kb-tree-root-bar">
+              <div id="kbTreeRootDrop" class="kb-tree-root-drop" title="Перетащите сюда, чтобы сделать раздел корневым (верхний уровень)">Корень</div>
+              <span id="kbTreeSpinner" class="spin" hidden aria-hidden="true"></span>
+              <span id="kbTreeStatusLine" class="kb-tree-status-line" aria-live="polite"></span>
+            </div>
+            <div id="kbTreeMoveLog" class="kb-tree-move-log" hidden></div>
             <div id="kbTreeMount"></div>
           </div>
         </div>
@@ -1203,7 +1423,7 @@
               </div>
             </div>
             <footer class="doc-foot">
-              <a href="/docs">OpenAPI</a> · <a href="/redoc">ReDoc</a>
+              <a href="/docs">OpenAPI</a> · <a href="/redoc">RAG api</a>
             </footer>
           </div>
         </div>
@@ -1212,8 +1432,13 @@
           <div class="chat-layout">
             <div class="chat-toolbar">
               <div class="rag-scope-box">
-                <p class="rag-scope-label">Разделы для RAG</p>
-                <div id="ragScopeMount" class="rag-scope-mount" aria-label="Выбор разделов для поиска"></div>
+                <button type="button" class="rag-scope-head" id="btnRagScopeToggle" aria-expanded="true" aria-controls="ragScopePanel">
+                  <span class="rag-scope-chevron" aria-hidden="true">▼</span>
+                  <span class="rag-scope-label">Выбор документов</span>
+                </button>
+                <div id="ragScopePanel" class="rag-scope-panel">
+                  <div id="ragScopeMount" class="rag-scope-mount" aria-label="Выбор разделов для поиска"></div>
+                </div>
               </div>
               <p id="chatNoColHint" class="status err hidden" style="margin:0">Создайте раздел на «Документы».</p>
             </div>
@@ -1271,17 +1496,15 @@
         <div id="view-tests" class="view">
           <div class="view-inner view-inner--tests">
             <header class="tests-page-header">
-              <h1>Тесты RAG</h1>
-              <p>Два независимых runtime-профиля, один вопрос и один выбор источников для обоих прогонов. Сравнение — без ручного копирования JSON.</p>
+              <h1>A/B-тесты</h1>
             </header>
             <section class="tests-card" id="testSourcesCard">
-              <h2>Источники для теста</h2>
-              <p class="status" style="font-size:0.8rem;margin:0.35rem 0 0.65rem 0">Общий <span class="mono">scope</span> для A и B (отдельно от вкладки «Чат»). Разделы и при необходимости конкретные документы.</p>
+              <h2>Выбор документов для теста</h2>
               <div id="testScopeMount"></div>
             </section>
             <div class="tests-grid">
               <div class="test-col" data-side="A">
-                <h3 id="profile-form-a-heading">Профиль A</h3>
+                <h3 id="profile-form-a-heading">Настройки A-теста</h3>
                 <form class="profile-form" id="profileFormA" autocomplete="off" onsubmit="return false">
                   <div class="pf-row">
                     <label class="pf-lbl" for="profileA_retrieval_top_k" title="Сколько top chunks брать из Chroma. Больше — выше recall, но больше шума, задержка и токены. Обычно 4–12.">retrieval_top_k (1–30)</label>
@@ -1367,7 +1590,7 @@
                 </div>
               </div>
               <div class="test-col" data-side="B">
-                <h3 id="profile-form-b-heading">Профиль B</h3>
+                <h3 id="profile-form-b-heading">Настройки B-теста</h3>
                 <form class="profile-form" id="profileFormB" autocomplete="off" onsubmit="return false">
                   <div class="pf-row">
                     <label class="pf-lbl" for="profileB_retrieval_top_k" title="Сколько top chunks брать из Chroma. Больше — выше recall, но больше шума, задержка и токены. Обычно 4–12.">retrieval_top_k (1–30)</label>
@@ -1523,6 +1746,80 @@
     let knowledgeSelection = null;
     let treeCollapsedIds = new Set();
     let currentDocDetail = null;
+    const kbDocMultiMap = new Map();
+    let kbDocRangeAnchor = null;
+    let kbDocQueueLocked = false;
+    function kbDocKey(sid, did) { return String(sid) + "\t" + String(did); }
+    function collectDocumentsInTreeOrder() {
+      const out = [];
+      function walk(node) {
+        for (const ch of node.children || []) walk(ch);
+        for (const d of node.documents || []) {
+          const nm = d.name != null ? String(d.name) : (d.filename != null ? String(d.filename) : d.id);
+          out.push({ sectionId: node.id, docId: d.id, name: nm });
+        }
+      }
+      for (const r of knowledgeTreeRoots || []) walk(r);
+      return out;
+    }
+    function isDocMultiSelected(sid, did) { return kbDocMultiMap.has(kbDocKey(sid, did)); }
+    function getMultiDragItemsInOrder() {
+      const out = [];
+      for (const x of collectDocumentsInTreeOrder()) {
+        if (!isDocMultiSelected(x.sectionId, x.docId)) continue;
+        const meta = kbDocMultiMap.get(kbDocKey(x.sectionId, x.docId));
+        out.push({ docId: x.docId, source: x.sectionId, name: (meta && meta.name) || x.name });
+      }
+      return out;
+    }
+    function markTreeDocMulti() {
+      document.querySelectorAll(".kb-doc-row").forEach((row) => {
+        row.classList.remove("kb-doc-multi");
+        const sid = row.getAttribute("data-sid");
+        const did = row.getAttribute("data-did");
+        if (sid && did && kbDocMultiMap.has(kbDocKey(sid, did))) row.classList.add("kb-doc-multi");
+      });
+    }
+    function clearKbDocMultiSelect() {
+      if (kbDocMultiMap.size === 0) return;
+      kbDocMultiMap.clear();
+      markTreeDocMulti();
+    }
+    function pruneKbDocMulti() {
+      const valid = new Set();
+      for (const x of collectDocumentsInTreeOrder()) valid.add(kbDocKey(x.sectionId, x.docId));
+      for (const k of Array.from(kbDocMultiMap.keys())) {
+        if (!valid.has(k)) kbDocMultiMap.delete(k);
+      }
+    }
+    function toggleKbDocMulti(sid, did, name) {
+      const k = kbDocKey(sid, did);
+      if (kbDocMultiMap.has(k)) kbDocMultiMap.delete(k);
+      else kbDocMultiMap.set(k, { name: name || String(did) });
+      kbDocRangeAnchor = { sectionId: sid, docId: did, name: name || String(did) };
+      markTreeDocMulti();
+    }
+    function shiftRangeKbDocMulti(sid, did, name) {
+      const flat = collectDocumentsInTreeOrder();
+      const idxCur = flat.findIndex((x) => x.sectionId === sid && x.docId === did);
+      if (idxCur < 0) return;
+      let idxA = idxCur;
+      if (kbDocRangeAnchor) {
+        const t = flat.findIndex(
+          (x) => x.sectionId === kbDocRangeAnchor.sectionId && x.docId === kbDocRangeAnchor.docId
+        );
+        if (t >= 0) idxA = t;
+      }
+      const a = Math.min(idxA, idxCur);
+      const b = Math.max(idxA, idxCur);
+      kbDocMultiMap.clear();
+      for (let i = a; i <= b; i++) {
+        const x = flat[i];
+        kbDocMultiMap.set(kbDocKey(x.sectionId, x.docId), { name: x.name });
+      }
+      kbDocRangeAnchor = { sectionId: sid, docId: did, name: name || String(did) };
+      markTreeDocMulti();
+    }
 
     function formatBytes(n) {
       if (n == null || !Number.isFinite(Number(n))) return "—";
@@ -1660,6 +1957,16 @@
     }
     let treeDndPayload = null;
     let treeDndOverEl = null;
+    let treeDndOverVisualKey = null;
+    function isKbTreeDragEvent(ev) {
+      if (treeDndPayload) return true;
+      const types = ev.dataTransfer && ev.dataTransfer.types;
+      if (!types) return false;
+      for (let i = 0; i < types.length; i++) {
+        if (types[i] === "application/x-kb-tree") return true;
+      }
+      return false;
+    }
     function clearTreeDropClasses() {
       document.querySelectorAll(".kb-tree-row.kb-drop-above, .kb-tree-row.kb-drop-below, .kb-tree-row.kb-drop-inside").forEach((el) => {
         el.classList.remove("kb-drop-above", "kb-drop-below", "kb-drop-inside");
@@ -1667,6 +1974,20 @@
       const z = $("kbTreeRootDrop");
       if (z) z.classList.remove("kb-drop-inside");
       treeDndOverEl = null;
+      treeDndOverVisualKey = null;
+    }
+    function setKbTreeBusy(loading, text) {
+      const sp = $("kbTreeSpinner");
+      const st = $("kbTreeStatusLine");
+      if (sp) {
+        if (loading) sp.removeAttribute("hidden");
+        else sp.setAttribute("hidden", "");
+      }
+      if (st && arguments.length > 1) st.textContent = text;
+    }
+    function setKbTreeStatusText(text) {
+      const st = $("kbTreeStatusLine");
+      if (st) st.textContent = text || "";
     }
     function computeRowDropIntent(row, clientY) {
       const r = row.getBoundingClientRect();
@@ -1711,6 +2032,10 @@
       el.setAttribute("draggable", "true");
       el.addEventListener("dragstart", (e) => {
         e.stopPropagation();
+        if (kbDocQueueLocked) {
+          e.preventDefault();
+          return;
+        }
         const row = el.closest(".kb-tree-row");
         if (!row) return;
         const kb = row.getAttribute("data-kb");
@@ -1721,19 +2046,137 @@
         } else if (kb === "doc") {
           const sid = row.getAttribute("data-sid");
           const did = row.getAttribute("data-did");
-          treeDndPayload = { t: "doc", docId: did, source: sid };
-          e.dataTransfer.setData("application/x-kb-tree", JSON.stringify({ t: "doc", docId: did, source: sid }));
+          const dname = row.getAttribute("data-filename") || did;
+          const group = isDocMultiSelected(sid, did) && kbDocMultiMap.size > 0;
+          if (group) {
+            const items = getMultiDragItemsInOrder();
+            if (items.length === 0) {
+              e.preventDefault();
+              return;
+            }
+            treeDndPayload = { t: "docs", items: items };
+            e.dataTransfer.setData("application/x-kb-tree", JSON.stringify({ t: "docs", items: items }));
+            try { e.dataTransfer.setData("text/plain", String(items.length) + " files"); } catch (err) { /* */ }
+          } else {
+            clearKbDocMultiSelect();
+            treeDndPayload = { t: "doc", docId: did, source: sid };
+            e.dataTransfer.setData("application/x-kb-tree", JSON.stringify({ t: "doc", docId: did, source: sid }));
+            try { e.dataTransfer.setData("text/plain", "kb"); } catch (err) { /* */ }
+          }
         } else {
           e.preventDefault();
           return;
         }
         e.dataTransfer.effectAllowed = "move";
-        try { e.dataTransfer.setData("text/plain", "kb"); } catch (err) { /* */ }
+        if (kb === "section") try { e.dataTransfer.setData("text/plain", "kb"); } catch (err) { /* */ }
       });
       el.addEventListener("dragend", () => {
         treeDndPayload = null;
         clearTreeDropClasses();
       });
+    }
+    async function runKbTreeDocsQueue(items, targetCid) {
+      if (!items || !items.length) return;
+      kbDocQueueLocked = true;
+      const log = $("kbTreeMoveLog");
+      if (log) {
+        log.removeAttribute("hidden");
+        log.innerHTML = "";
+        items.forEach((it, i) => {
+          const line = document.createElement("div");
+          line.className = "kb-tree-move-line st-wait";
+          line.setAttribute("data-idx", String(i));
+          const nm = document.createElement("span");
+          nm.className = "nm";
+          nm.textContent = it.name;
+          const st = document.createElement("span");
+          st.className = "st";
+          st.textContent = "В очереди";
+          line.appendChild(nm);
+          line.appendChild(st);
+          log.appendChild(line);
+        });
+      }
+      let nOk = 0, nSkip = 0, nErr = 0;
+      const total = items.length;
+      const openSel = knowledgeSelection && knowledgeSelection.type === "document" ? knowledgeSelection.documentId : null;
+      let openDocSucceeded = false;
+      try {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const line = log && log.querySelector("[data-idx=\"" + i + "\"]");
+          const stEl = line && line.querySelector(".st");
+          setKbTreeBusy(true, "Перемещение файлов: " + (i + 1) + "/" + total + " — " + it.name);
+          if (it.source === targetCid) {
+            if (line) {
+              line.className = "kb-tree-move-line st-skip";
+              stEl.textContent = "Пропущено";
+            }
+            nSkip++;
+            continue;
+          }
+          if (line) {
+            line.className = "kb-tree-move-line st-run";
+            stEl.textContent = "Перемещается…";
+          }
+          try {
+            const r = await fetch(
+              apiPath("/v1/collections/" + encodeURIComponent(targetCid) + "/documents/" + encodeURIComponent(it.docId) + "/move"),
+              { method: "POST", headers: headers(true), body: JSON.stringify({ source_collection_id: it.source }) }
+            );
+            if (!r.ok) throw new Error(await r.text());
+            if (line) {
+              line.className = "kb-tree-move-line st-ok";
+              stEl.textContent = "Готово";
+            }
+            nOk++;
+            if (openSel && it.docId === openSel) openDocSucceeded = true;
+          } catch (err) {
+            nErr++;
+            const msg = (err && err.message) ? String(err.message) : String(err);
+            if (line) {
+              line.className = "kb-tree-move-line st-err";
+              stEl.textContent = "Ошибка: " + (msg.length > 100 ? msg.slice(0, 100) + "…" : msg);
+            }
+          }
+        }
+        if (nOk > 0 && openDocSucceeded) {
+          try {
+            localStorage.setItem(cidStore, targetCid);
+            knowledgeSelection = { type: "document", sectionId: targetCid, documentId: openSel };
+            try { localStorage.setItem(knowledgeSelStore, JSON.stringify(knowledgeSelection)); } catch (e) { /* */ }
+            selectedCid = targetCid;
+          } catch (e) { /* */ }
+        }
+        clearKbDocMultiSelect();
+        if (nOk > 0) {
+          await loadCollections();
+        }
+        if (nOk > 0 && openDocSucceeded) {
+          const nn = findSectionNode(targetCid);
+          if (nn) {
+            const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(targetCid) + "/documents"), { headers: headers(false) });
+            if (rr.ok) {
+              const list = await rr.json();
+              const drow = (list || []).find((x) => x.id === openSel);
+              if (drow) {
+                openDocumentDetail(
+                  { id: drow.id, name: drow.filename, size_bytes: drow.size_bytes, mime: drow.mime, created_at: drow.created_at },
+                  nn
+                );
+              }
+            }
+          }
+        }
+        setKbTreeStatusText("Готово: " + nOk + ", пропущено: " + nSkip + ", ошибок: " + nErr);
+        setTimeout(() => {
+          setKbTreeStatusText("");
+          if (log) log.setAttribute("hidden", "");
+        }, 5000);
+      } finally {
+        kbDocQueueLocked = false;
+        setKbTreeBusy(false, "");
+      }
     }
     async function runKbTreeDrop(payload, ev) {
       errBox($("kbTreeErr"), "");
@@ -1746,7 +2189,25 @@
       }
       const normP = (x) => (x == null || x === "" ? null : x);
       let reopenDocAfter = null;
+      let willMutateTree = false;
+      let moveFinishedOk = false;
       try {
+        if (payload.t === "docs") {
+          if (rootZ) {
+            errBox($("kbTreeErr"), "Документы нельзя переложить в «Корень» — перетащите в раздел.");
+            return;
+          }
+          if (!row) return;
+          if (kbDocQueueLocked) {
+            errBox($("kbTreeErr"), "Дождитесь окончания переноса.");
+            return;
+          }
+          const targetCid = resolveDocumentTargetCollectionId(row, intent);
+          if (!targetCid) return;
+          if (!payload.items || !payload.items.length) return;
+          await runKbTreeDocsQueue(payload.items, targetCid);
+          return;
+        }
         if (payload.t === "section") {
           let newParent = undefined;
           if (rootZ) {
@@ -1771,6 +2232,8 @@
             return;
           }
           if (normP(newParent) === normP(getCurrentSectionParentId(dragId))) return;
+          willMutateTree = true;
+          setKbTreeBusy(true, rootZ ? "Перенос раздела в корень…" : "Перемещение раздела…");
           const r = await fetch(
             apiPath("/v1/collections/" + encodeURIComponent(dragId)),
             { method: "PATCH", headers: headers(true), body: JSON.stringify({ parent_id: newParent }) }
@@ -1785,6 +2248,8 @@
           const targetCid = resolveDocumentTargetCollectionId(row, intent);
           if (!targetCid) return;
           if (targetCid === payload.source) return;
+          willMutateTree = true;
+          setKbTreeBusy(true, "Перемещение документа…");
           const r = await fetch(
             apiPath(
               "/v1/collections/" + encodeURIComponent(targetCid) + "/documents/" + encodeURIComponent(payload.docId) + "/move"
@@ -1800,50 +2265,80 @@
             reopenDocAfter = { cid: targetCid, did: payload.docId };
           }
         }
-        await loadCollections();
-        if (reopenDocAfter) {
-          const rc = reopenDocAfter.cid;
-          const rd = reopenDocAfter.did;
-          const nn = findSectionNode(rc);
-          const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(rc) + "/documents"), { headers: headers(false) });
-          if (rr.ok) {
-            const list = await rr.json();
-            const drow = (list || []).find((x) => x.id === rd);
-            if (drow && nn) {
-              openDocumentDetail(
-                { id: drow.id, name: drow.filename, size_bytes: drow.size_bytes, mime: drow.mime, created_at: drow.created_at },
-                nn
-              );
+        if (willMutateTree) {
+          await loadCollections();
+          if (reopenDocAfter) {
+            const rc = reopenDocAfter.cid;
+            const rd = reopenDocAfter.did;
+            const nn = findSectionNode(rc);
+            const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(rc) + "/documents"), { headers: headers(false) });
+            if (rr.ok) {
+              const list = await rr.json();
+              const drow = (list || []).find((x) => x.id === rd);
+              if (drow && nn) {
+                openDocumentDetail(
+                  { id: drow.id, name: drow.filename, size_bytes: drow.size_bytes, mime: drow.mime, created_at: drow.created_at },
+                  nn
+                );
+              }
             }
           }
+          moveFinishedOk = true;
         }
       } catch (e) {
+        setKbTreeBusy(false, "");
+        setKbTreeStatusText("");
         errBox($("kbTreeErr"), String(e));
+        moveFinishedOk = false;
       } finally {
         clearTreeDropClasses();
         treeDndPayload = null;
+        setKbTreeBusy(false);
+      }
+      if (moveFinishedOk) {
+        setKbTreeStatusText("Готово");
+        setTimeout(() => setKbTreeStatusText(""), 2000);
       }
     }
     function onKbTreeContainerDragOver(ev) {
-      if (!treeDndPayload) return;
+      if (!isKbTreeDragEvent(ev)) return;
       ev.preventDefault();
       ev.dataTransfer.dropEffect = "move";
+      if (!treeDndPayload) return;
       const sc = $("kbTreeScroll");
-      if (!sc || !sc.contains(ev.target)) return;
-      const rootZ = ev.target.closest && ev.target.closest("#kbTreeRootDrop");
-      const row = ev.target.closest && ev.target.closest(".kb-tree-row");
-      clearTreeDropClasses();
-      if (rootZ) {
-        if (treeDndPayload.t === "section") {
-          rootZ.classList.add("kb-drop-inside");
-          treeDndOverEl = rootZ;
+      if (!sc || !sc.contains(ev.target)) {
+        if (treeDndOverVisualKey != null) {
+          clearTreeDropClasses();
         }
         return;
       }
-      if (!row) return;
+      const rootZ = ev.target.closest && ev.target.closest("#kbTreeRootDrop");
+      const row = ev.target.closest && ev.target.closest(".kb-tree-row");
+      if (rootZ) {
+        if (treeDndPayload.t === "section") {
+          if (treeDndOverVisualKey === "root:inside" && treeDndOverEl === rootZ) return;
+          clearTreeDropClasses();
+          rootZ.classList.add("kb-drop-inside");
+          treeDndOverEl = rootZ;
+          treeDndOverVisualKey = "root:inside";
+        } else {
+          if (treeDndOverVisualKey != null) clearTreeDropClasses();
+        }
+        return;
+      }
+      if (!row) {
+        if (treeDndOverVisualKey != null) clearTreeDropClasses();
+        return;
+      }
       const int = computeRowDropIntent(row, ev.clientY);
+      const kb = row.getAttribute("data-kb");
+      const rid = (kb === "doc" ? row.getAttribute("data-did") : row.getAttribute("data-sid")) || "";
+      const vkey = rid + "|" + kb + "|" + int;
+      if (vkey === treeDndOverVisualKey && treeDndOverEl === row) return;
+      clearTreeDropClasses();
       row.classList.add(int === "inside" ? "kb-drop-inside" : int === "above" ? "kb-drop-above" : "kb-drop-below");
       treeDndOverEl = row;
+      treeDndOverVisualKey = vkey;
     }
     function onKbTreeContainerDrop(ev) {
       const p = treeDndPayload;
@@ -1872,6 +2367,7 @@
         if (e.key === "Escape") {
           clearTreeDropClasses();
           treeDndPayload = null;
+          if (currentView === "docs" && !kbDocQueueLocked) clearKbDocMultiSelect();
         }
       });
     }
@@ -1887,6 +2383,7 @@
           el.classList.add("kb-active");
         }
       });
+      markTreeDocMulti();
     }
     function refreshKbTreeLabelTitles() {
       const sc = $("kbTreeScroll");
@@ -1933,6 +2430,7 @@
       if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
       if ($("newColParentHint")) { $("newColParentHint").style.display = "none"; }
       if ($("newColParentId")) $("newColParentId").value = "";
+      clearKbDocMultiSelect();
       markTreeActive();
     }
     function fillSectionChildrenFromTree(sectionId) {
@@ -2001,6 +2499,8 @@
       row.setAttribute("data-kb", "doc");
       row.setAttribute("data-sid", parentNode.id);
       row.setAttribute("data-did", d.id);
+      const docName = d.name != null ? String(d.name) : "";
+      row.setAttribute("data-filename", docName);
       const tgl = document.createElement("button");
       tgl.type = "button";
       tgl.className = "kb-tree-tgl";
@@ -2010,10 +2510,24 @@
       const lab = document.createElement("button");
       lab.type = "button";
       lab.className = "kb-tree-label";
-      const docName = d.name != null ? String(d.name) : "";
       lab.setAttribute("data-full-name", docName);
       lab.textContent = docName;
-      lab.onclick = (e) => { e.stopPropagation(); openDocumentDetail(d, parentNode); };
+      lab.onclick = (e) => {
+        e.stopPropagation();
+        if (e.shiftKey) {
+          e.preventDefault();
+          shiftRangeKbDocMulti(parentNode.id, d.id, docName);
+          return;
+        }
+        if (e.ctrlKey || (e.metaKey && !e.altKey)) {
+          e.preventDefault();
+          toggleKbDocMulti(parentNode.id, d.id, docName);
+          return;
+        }
+        clearKbDocMultiSelect();
+        kbDocRangeAnchor = { sectionId: parentNode.id, docId: d.id, name: docName || String(d.id) };
+        openDocumentDetail(d, parentNode);
+      };
       const ico = kbTreeIconEl("file");
       ico.title = "Перетащить документ";
       bindTreeDragHandle(ico);
@@ -2118,22 +2632,24 @@
       for (const n of knowledgeTreeRoots) {
         mount.appendChild(renderSectionNode(n, 0, null));
       }
+      pruneKbDocMulti();
       markTreeActive();
       initKbTreeLabelTitles();
       scheduleKbTreeLabelTitles();
     }
     async function loadKnowledgeTree() {
-      if ($("kbTreeLoader")) $("kbTreeLoader").style.display = "block";
+      setKbTreeBusy(true, "Загрузка дерева…");
       errBox($("kbTreeErr"), "");
       try {
         const r = await fetch(apiPath("/v1/collections/tree"), { headers: headers(false) });
-        if ($("kbTreeLoader")) $("kbTreeLoader").style.display = "none";
         if (!r.ok) throw new Error(await r.text());
         knowledgeTreeRoots = await r.json();
         renderKbTree();
       } catch (e) {
-        if ($("kbTreeLoader")) $("kbTreeLoader").style.display = "none";
+        setKbTreeStatusText("");
         errBox($("kbTreeErr"), String(e));
+      } finally {
+        setKbTreeBusy(false, "");
       }
     }
     async function loadKnowledgeStats() {
@@ -2168,74 +2684,88 @@
         errBox($("knowledgeStatsErr"), String(e));
       }
     }
-    function editSectionDialog(node) {
-      const name = window.prompt("Новое имя раздела", node.name);
+    async function editSectionDialog(node) {
+      const name = await showPromptDialog({
+        title: "Переименовать раздел",
+        label: "Новое имя раздела",
+        defaultValue: node.name || "",
+        confirmLabel: "Сохранить",
+      });
       if (name == null) return;
       const t = name.trim();
       if (!t) return;
-      (async () => {
-        try {
-          const r = await fetch(
-            apiPath("/v1/collections/" + encodeURIComponent(node.id)),
-            { method: "PATCH", headers: headers(true), body: JSON.stringify({ name: t }) }
-          );
-          if (!r.ok) throw new Error(await r.text());
-          await loadCollections();
-        } catch (e) { errBox($("colErr") || $("kbTreeErr"), String(e)); }
-      })();
+      try {
+        const r = await fetch(
+          apiPath("/v1/collections/" + encodeURIComponent(node.id)),
+          { method: "PATCH", headers: headers(true), body: JSON.stringify({ name: t }) }
+        );
+        if (!r.ok) throw new Error(await r.text());
+        await loadCollections();
+      } catch (e) { errBox($("colErr") || $("kbTreeErr"), String(e)); }
     }
-    function renameDocumentFlow(parentNode, d) {
-      const name = window.prompt("Новое имя файла", d.name);
+    async function renameDocumentFlow(parentNode, d) {
+      const name = await showPromptDialog({
+        title: "Переименовать файл",
+        label: "Новое имя файла",
+        defaultValue: d.name || "",
+        confirmLabel: "Сохранить",
+      });
       if (name == null) return;
       const t = name.trim();
       if (!t) return;
-      (async () => {
-        try {
-          const r = await fetch(
-            apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents/" + encodeURIComponent(d.id)),
-            { method: "PATCH", headers: headers(true), body: JSON.stringify({ filename: t }) }
-          );
-          if (!r.ok) throw new Error(await r.text());
-          await loadDocs();
-          await loadKnowledgeTree();
-          if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === d.id) {
-            const row = await (async () => {
-              const rr = await fetch(
-                apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents"),
-                { headers: headers(false) }
-              );
-              if (!rr.ok) return null;
-              const list = await rr.json();
-              return (list || []).find((x) => x.id === d.id) || { id: d.id, name: t, size_bytes: d.size_bytes, mime: d.mime, created_at: d.created_at };
-            })();
-            openDocumentDetail(
-              { id: row.id, name: row.filename || t, size_bytes: row.size_bytes, mime: row.mime, created_at: row.created_at },
-              { id: parentNode.id, name: parentNode.name }
+      try {
+        const r = await fetch(
+          apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents/" + encodeURIComponent(d.id)),
+          { method: "PATCH", headers: headers(true), body: JSON.stringify({ filename: t }) }
+        );
+        if (!r.ok) throw new Error(await r.text());
+        await loadDocs();
+        await loadKnowledgeTree();
+        if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === d.id) {
+          const row = await (async () => {
+            const rr = await fetch(
+              apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents"),
+              { headers: headers(false) }
             );
-          }
-        } catch (e) { errBox($("docErr") || $("kbTreeErr"), String(e)); }
-      })();
-    }
-    function deleteDocumentFlow(parentNode, d) {
-      if (!window.confirm("Удалить документ «" + (d.name || d.id) + "» из индекса?")) return;
-      (async () => {
-        try {
-          const r = await fetch(
-            apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents/" + encodeURIComponent(d.id)),
-            { method: "DELETE", headers: headers(false) }
+            if (!rr.ok) return null;
+            const list = await rr.json();
+            return (list || []).find((x) => x.id === d.id) || { id: d.id, name: t, size_bytes: d.size_bytes, mime: d.mime, created_at: d.created_at };
+          })();
+          openDocumentDetail(
+            { id: row.id, name: row.filename || t, size_bytes: row.size_bytes, mime: row.mime, created_at: row.created_at },
+            { id: parentNode.id, name: parentNode.name }
           );
-          if (!r.ok) throw new Error(await r.text());
-          if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === d.id) {
-            openSectionInMain(parentNode);
-          }
-          await loadDocs();
-          await loadKnowledgeTree();
-          await loadKnowledgeStats();
-        } catch (e) { errBox($("docErr") || $("kbTreeErr"), String(e)); }
-      })();
+        }
+      } catch (e) { errBox($("docErr") || $("kbTreeErr"), String(e)); }
+    }
+    async function deleteDocumentFlow(parentNode, d) {
+      const ok = await showConfirmDialog({
+        message: "Удалить документ «" + (d.name || d.id) + "» из индекса?",
+        confirmLabel: "Удалить",
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        const r = await fetch(
+          apiPath("/v1/collections/" + encodeURIComponent(parentNode.id) + "/documents/" + encodeURIComponent(d.id)),
+          { method: "DELETE", headers: headers(false) }
+        );
+        if (!r.ok) throw new Error(await r.text());
+        if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === d.id) {
+          openSectionInMain(parentNode);
+        }
+        await loadDocs();
+        await loadKnowledgeTree();
+        await loadKnowledgeStats();
+      } catch (e) { errBox($("docErr") || $("kbTreeErr"), String(e)); }
     }
     async function deleteSectionFromTree(node) {
-      if (!window.confirm("Удалить раздел «" + node.name + "» и все вложенные подразделы, документы и индекс?")) return;
+      const ok = await showConfirmDialog({
+        message: "Удалить раздел «" + node.name + "» и все вложенные подразделы, документы и индекс?",
+        confirmLabel: "Удалить",
+        destructive: true,
+      });
+      if (!ok) return;
       errBox($("colErr"), "");
       try {
         const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(node.id)), { method: "DELETE", headers: headers(false) });
@@ -2266,11 +2796,217 @@
       };
       applyDebugFromStorage();
     }
+    /** Ошибки в UI — через errBox / showHead; не использовать alert(). */
     function errBox(el, e) { el.textContent = e || ""; }
     function showHead(s, ok) {
       const n = $("headStatus");
       n.textContent = s;
       n.className = "status head-status " + (ok ? "ok" : "err");
+    }
+    /**
+     * @param {{ title?: string, message: string, confirmLabel?: string, cancelLabel?: string, destructive?: boolean }} opts
+     * @returns {Promise<boolean>}
+     */
+    function showConfirmDialog(opts) {
+      const o = opts || {};
+      const title = o.title || "";
+      const message = o.message || "";
+      const confirmLabel = o.confirmLabel || "ОК";
+      const cancelLabel = o.cancelLabel || "Отмена";
+      const destructive = !!o.destructive;
+      return new Promise((resolve) => {
+        let settled = false;
+        const prevActive = document.activeElement;
+        const backdrop = document.createElement("div");
+        backdrop.className = "app-modal-backdrop";
+        const panel = document.createElement("div");
+        panel.className = "app-modal-panel";
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-modal", "true");
+        panel.setAttribute("aria-label", title || "Подтверждение действия");
+        const msg = document.createElement("p");
+        msg.className = "app-modal-message";
+        msg.id = "app-modal-desc-" + Math.random().toString(36).slice(2);
+        msg.textContent = message;
+        panel.setAttribute("aria-describedby", msg.id);
+        const actions = document.createElement("div");
+        actions.className = "app-modal-actions";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "app-modal-btn app-modal-btn-secondary";
+        cancelBtn.textContent = cancelLabel;
+        const confirmBtn = document.createElement("button");
+        confirmBtn.type = "button";
+        confirmBtn.className =
+          "app-modal-btn " + (destructive ? "app-modal-btn-danger" : "app-modal-btn-primary");
+        confirmBtn.textContent = confirmLabel;
+        function cleanup(val) {
+          if (settled) return;
+          settled = true;
+          document.removeEventListener("keydown", onDocKey, true);
+          backdrop.remove();
+          if (prevActive && typeof prevActive.focus === "function") {
+            try {
+              prevActive.focus({ preventScroll: true });
+            } catch (e) {
+              try {
+                prevActive.focus();
+              } catch (e2) { /* noop */ }
+            }
+          }
+          resolve(val);
+        }
+        function onDocKey(ev) {
+          if (ev.key === "Escape") {
+            ev.preventDefault();
+            ev.stopPropagation();
+            cleanup(false);
+          }
+        }
+        cancelBtn.onclick = () => cleanup(false);
+        confirmBtn.onclick = () => cleanup(true);
+        panel.addEventListener("keydown", (ev) => {
+          if (ev.key !== "Enter" || ev.shiftKey) return;
+          if (ev.target === cancelBtn) return;
+          ev.preventDefault();
+          cleanup(true);
+        });
+        backdrop.addEventListener("click", (e) => {
+          if (e.target !== backdrop) return;
+          if (destructive) return;
+          cleanup(false);
+        });
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+        if (title) {
+          const h = document.createElement("h2");
+          h.className = "app-modal-title";
+          h.textContent = title;
+          panel.appendChild(h);
+        }
+        panel.appendChild(msg);
+        panel.appendChild(actions);
+        backdrop.appendChild(panel);
+        document.body.appendChild(backdrop);
+        document.addEventListener("keydown", onDocKey, true);
+        if (destructive) cancelBtn.focus();
+        else confirmBtn.focus();
+      });
+    }
+    /**
+     * @param {{ title?: string, label?: string, defaultValue?: string, placeholder?: string, confirmLabel?: string, cancelLabel?: string }} opts
+     * @returns {Promise<string | null>}
+     */
+    function showPromptDialog(opts) {
+      const o = opts || {};
+      const title = o.title || "";
+      const label = o.label || "";
+      const defaultValue = o.defaultValue != null ? String(o.defaultValue) : "";
+      const placeholder = o.placeholder || "";
+      const confirmLabel = o.confirmLabel || "Сохранить";
+      const cancelLabel = o.cancelLabel || "Отмена";
+      return new Promise((resolve) => {
+        let settled = false;
+        const prevActive = document.activeElement;
+        const backdrop = document.createElement("div");
+        backdrop.className = "app-modal-backdrop";
+        const panel = document.createElement("div");
+        panel.className = "app-modal-panel";
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-modal", "true");
+        panel.setAttribute("aria-label", title || label || "Ввод");
+        const field = document.createElement("div");
+        field.className = "app-modal-field";
+        const lab = document.createElement("label");
+        const inputId = "app-modal-prompt-" + Math.random().toString(36).slice(2);
+        lab.setAttribute("for", inputId);
+        lab.textContent = label;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = inputId;
+        input.value = defaultValue;
+        input.placeholder = placeholder;
+        input.autocomplete = "off";
+        field.appendChild(lab);
+        field.appendChild(input);
+        const actions = document.createElement("div");
+        actions.className = "app-modal-actions";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "app-modal-btn app-modal-btn-secondary";
+        cancelBtn.textContent = cancelLabel;
+        const confirmBtn = document.createElement("button");
+        confirmBtn.type = "button";
+        confirmBtn.className = "app-modal-btn app-modal-btn-primary";
+        confirmBtn.textContent = confirmLabel;
+        function syncPrimary() {
+          confirmBtn.disabled = !input.value.trim();
+        }
+        syncPrimary();
+        input.addEventListener("input", syncPrimary);
+        function cleanup(val) {
+          if (settled) return;
+          settled = true;
+          document.removeEventListener("keydown", onDocKey, true);
+          backdrop.remove();
+          if (prevActive && typeof prevActive.focus === "function") {
+            try {
+              prevActive.focus({ preventScroll: true });
+            } catch (e) {
+              try {
+                prevActive.focus();
+              } catch (e2) { /* noop */ }
+            }
+          }
+          resolve(val);
+        }
+        function tryConfirm() {
+          const t = input.value.trim();
+          if (!t) return;
+          cleanup(t);
+        }
+        function onDocKey(ev) {
+          if (ev.key === "Escape") {
+            ev.preventDefault();
+            ev.stopPropagation();
+            cleanup(null);
+          }
+        }
+        cancelBtn.onclick = () => cleanup(null);
+        confirmBtn.onclick = () => tryConfirm();
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            if (input.value.trim()) tryConfirm();
+          }
+        });
+        panel.addEventListener("keydown", (ev) => {
+          if (ev.key !== "Enter" || ev.shiftKey) return;
+          if (ev.target === input || ev.target === cancelBtn) return;
+          if (!input.value.trim()) return;
+          ev.preventDefault();
+          tryConfirm();
+        });
+        backdrop.addEventListener("click", (e) => {
+          if (e.target !== backdrop) return;
+          cleanup(null);
+        });
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+        if (title) {
+          const h = document.createElement("h2");
+          h.className = "app-modal-title";
+          h.textContent = title;
+          panel.appendChild(h);
+        }
+        panel.appendChild(field);
+        panel.appendChild(actions);
+        backdrop.appendChild(panel);
+        document.body.appendChild(backdrop);
+        document.addEventListener("keydown", onDocKey, true);
+        input.focus();
+        input.select();
+      });
     }
     function applyKeyFromStorage() {
       const el = $("apiKey");
@@ -2965,7 +3701,12 @@
     }
 
     async function deleteTestFavorite(id) {
-      if (!confirm("Удалить избранный тест " + id + "?")) return;
+      const ok = await showConfirmDialog({
+        message: "Удалить избранный тест " + id + "?",
+        confirmLabel: "Удалить",
+        destructive: true,
+      });
+      if (!ok) return;
       try {
         const rr = await fetch(apiPath("/v1/rag-test/favorites/" + encodeURIComponent(id)), { method: "DELETE", headers: headers(false) });
         if (!rr.ok) throw new Error(await rr.text());
@@ -3403,7 +4144,12 @@
 
     $("btnDelCol").onclick = async () => {
       if (!selectedCid) return;
-      if (!window.confirm("Удалить раздел и все вложенные подразделы, документы и индекс Chroma?")) return;
+      const ok = await showConfirmDialog({
+        message: "Удалить раздел и все вложенные подразделы, документы и индекс Chroma?",
+        confirmLabel: "Удалить",
+        destructive: true,
+      });
+      if (!ok) return;
       errBox($("colErr"), "");
       const gone = selectedCid;
       try {
@@ -3597,7 +4343,12 @@
           del.textContent = "×";
           del.onclick = async (e) => {
             e.stopPropagation();
-            if (!confirm("Удалить чат и историю?")) return;
+            const ok = await showConfirmDialog({
+              message: "Удалить чат и историю?",
+              confirmLabel: "Удалить",
+              destructive: true,
+            });
+            if (!ok) return;
             try {
               const rr = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(t.id)), { method: "DELETE", headers: headers(false) });
               if (!rr.ok) throw new Error(await rr.text());
@@ -3643,7 +4394,12 @@
     }
 
     async function renameThread(id, current) {
-      const t = prompt("Название чата", current);
+      const t = await showPromptDialog({
+        title: "Переименовать чат",
+        label: "Название чата",
+        defaultValue: current || "",
+        confirmLabel: "Сохранить",
+      });
       if (t == null || !t.trim()) return;
       try {
         const r = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(id)), {
@@ -3713,6 +4469,18 @@
         sendChat();
       }
     });
+
+    (function initRagScopeCollapse() {
+      const btn = $("btnRagScopeToggle");
+      const panel = $("ragScopePanel");
+      const box = btn && btn.closest(".rag-scope-box");
+      if (!btn || !panel || !box) return;
+      btn.addEventListener("click", () => {
+        const collapsed = box.classList.toggle("rag-scope-collapsed");
+        btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        panel.hidden = collapsed;
+      });
+    })();
 
     setView("chat");
     loadHealth();
