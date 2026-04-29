@@ -160,10 +160,10 @@ def _serialize_chunks_for_db(chunks: list[dict[str, Any]], max_text: int = 2000)
 
 
 def _favorites_dir(settings: Settings) -> Path:
-    from app.request_tenant import current_tenant_id
+    from app.request_tenant import require_bound_tenant_id
     from app.tenancy import tenant_dir
 
-    td = tenant_dir(settings.data_dir, current_tenant_id.get())
+    td = tenant_dir(settings.data_dir, require_bound_tenant_id())
     d = td / "tests_favorite"
     d.mkdir(parents=True, exist_ok=True)
     return d.resolve()
@@ -229,7 +229,7 @@ def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
 
 
 @router.get("/rag-test/profiles", response_model=list[TestProfileOut])
-def list_test_profiles(
+async def list_test_profiles(
     kind: str | None = Query(default=None, description="runtime | index"),
 ) -> list[TestProfileOut]:
     db = deps.get_db()
@@ -238,7 +238,7 @@ def list_test_profiles(
 
 
 @router.post("/rag-test/profiles", response_model=TestProfileOut, dependencies=[Depends(require_admin)])
-def create_test_profile(
+async def create_test_profile(
     body: TestProfileCreate,
     _settings: Settings = Depends(get_settings),
 ) -> TestProfileOut:
@@ -259,7 +259,7 @@ def create_test_profile(
 
 
 @router.get("/rag-test/profiles/{profile_id}", response_model=TestProfileOut)
-def get_test_profile(profile_id: str) -> TestProfileOut:
+async def get_test_profile(profile_id: str) -> TestProfileOut:
     db = deps.get_db()
     row = db.get_rag_test_profile(profile_id)
     if not row:
@@ -268,7 +268,7 @@ def get_test_profile(profile_id: str) -> TestProfileOut:
 
 
 @router.put("/rag-test/profiles/{profile_id}", response_model=TestProfileOut, dependencies=[Depends(require_admin)])
-def update_test_profile(
+async def update_test_profile(
     profile_id: str,
     body: TestProfileCreate,
 ) -> TestProfileOut:
@@ -292,7 +292,7 @@ def update_test_profile(
 
 
 @router.delete("/rag-test/profiles/{profile_id}", dependencies=[Depends(require_admin)])
-def delete_test_profile(profile_id: str) -> dict[str, str]:
+async def delete_test_profile(profile_id: str) -> dict[str, str]:
     db = deps.get_db()
     if not db.delete_rag_test_profile(profile_id):
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -301,15 +301,15 @@ def delete_test_profile(profile_id: str) -> dict[str, str]:
 
 
 @router.post("/rag-test/profiles/import", response_model=TestProfileOut, dependencies=[Depends(require_admin)])
-def import_test_profile(
+async def import_test_profile(
     body: TestProfileCreate,
     settings: Settings = Depends(get_settings),
 ) -> TestProfileOut:
-    return create_test_profile(body, settings)
+    return await create_test_profile(body, settings)
 
 
 @router.get("/rag-test/profiles/{profile_id}/export")
-def export_test_profile(profile_id: str) -> JSONResponse:
+async def export_test_profile(profile_id: str) -> JSONResponse:
     db = deps.get_db()
     row = db.get_rag_test_profile(profile_id)
     if not row:
@@ -325,7 +325,7 @@ def export_test_profile(profile_id: str) -> JSONResponse:
 
 
 @router.post("/rag-test/run")
-def test_run(
+async def test_run(
     body: TestRunIn,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
@@ -392,7 +392,7 @@ def test_run(
 
 
 @router.post("/rag-test/compare")
-def test_compare(
+async def test_compare(
     body: TestCompareIn,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
@@ -472,13 +472,13 @@ def test_compare(
 
 
 @router.get("/rag-test/runs")
-def list_test_runs(limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
+async def list_test_runs(limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
     db = deps.get_db()
     return db.list_rag_test_runs(limit=limit)
 
 
 @router.get("/rag-test/runs/{run_id}")
-def get_test_run(run_id: str) -> dict[str, Any]:
+async def get_test_run(run_id: str) -> dict[str, Any]:
     db = deps.get_db()
     row = db.get_rag_test_run(run_id)
     if not row:
@@ -487,7 +487,7 @@ def get_test_run(run_id: str) -> dict[str, Any]:
 
 
 @router.get("/rag-test/main-chat-profile")
-def main_chat_profile_get() -> dict[str, Any]:
+async def main_chat_profile_get() -> dict[str, Any]:
     db = deps.get_db()
     row = db.get_rag_runtime_settings()
     if not row:
@@ -500,7 +500,7 @@ def main_chat_profile_get() -> dict[str, Any]:
 
 
 @router.delete("/rag-test/main-chat-profile", dependencies=[Depends(require_admin)])
-def main_chat_profile_reset() -> dict[str, str]:
+async def main_chat_profile_reset() -> dict[str, str]:
     """Сбросить серверные overrides основного чата (distance_threshold, system_prompt и т.д.)."""
     db = deps.get_db()
     db.delete_rag_runtime_settings("main_chat")
@@ -509,7 +509,7 @@ def main_chat_profile_reset() -> dict[str, str]:
 
 
 @router.post("/rag-test/apply-to-chat", dependencies=[Depends(require_admin)])
-def main_chat_apply(
+async def main_chat_apply(
     body: ApplyToChatIn,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
@@ -533,7 +533,7 @@ def main_chat_apply(
 
 
 @router.get("/rag-test/favorites", response_model=list[TestFavoriteSummary])
-def list_test_favorites(settings: Settings = Depends(get_settings)) -> list[TestFavoriteSummary]:
+async def list_test_favorites(settings: Settings = Depends(get_settings)) -> list[TestFavoriteSummary]:
     d = _favorites_dir(settings)
     out: list[TestFavoriteSummary] = []
     try:
@@ -574,7 +574,7 @@ def list_test_favorites(settings: Settings = Depends(get_settings)) -> list[Test
 
 
 @router.post("/rag-test/favorites", response_model=TestFavoriteOut)
-def create_test_favorite(
+async def create_test_favorite(
     body: TestFavoriteCreate,
     settings: Settings = Depends(get_settings),
 ) -> TestFavoriteOut:
@@ -617,7 +617,7 @@ def create_test_favorite(
 
 
 @router.get("/rag-test/favorites/{favorite_id}", response_model=TestFavoriteOut)
-def get_test_favorite(
+async def get_test_favorite(
     favorite_id: str,
     settings: Settings = Depends(get_settings),
 ) -> TestFavoriteOut:
@@ -648,7 +648,7 @@ def get_test_favorite(
 
 
 @router.delete("/rag-test/favorites/{favorite_id}")
-def delete_test_favorite(
+async def delete_test_favorite(
     favorite_id: str,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
@@ -673,12 +673,12 @@ class BenchmarkSetCreate(BaseModel):
 
 
 @router.get("/rag-test/benchmarks")
-def benchmark_list() -> list[dict[str, Any]]:
+async def benchmark_list() -> list[dict[str, Any]]:
     return deps.get_db().list_benchmark_sets()
 
 
 @router.post("/rag-test/benchmarks", dependencies=[Depends(require_admin)])
-def benchmark_create(body: BenchmarkSetCreate) -> dict[str, str]:
+async def benchmark_create(body: BenchmarkSetCreate) -> dict[str, str]:
     sid = str(uuid4())
     deps.get_db().insert_benchmark_set(sid, body.name, body.description)
     deps.get_db().audit("rag.benchmark.set.create", f"id={sid} name={body.name}")
@@ -686,7 +686,7 @@ def benchmark_create(body: BenchmarkSetCreate) -> dict[str, str]:
 
 
 @router.get("/rag-test/benchmarks/{set_id}/questions")
-def benchmark_questions_list(set_id: str) -> list[dict[str, Any]]:
+async def benchmark_questions_list(set_id: str) -> list[dict[str, Any]]:
     db = deps.get_db()
     if not db.get_benchmark_set(set_id):
         raise HTTPException(status_code=404, detail="Benchmark set not found")
@@ -700,7 +700,7 @@ class BenchmarkQuestionIn(BaseModel):
 
 
 @router.post("/rag-test/benchmarks/{set_id}/questions", dependencies=[Depends(require_admin)])
-def benchmark_question_add(set_id: str, body: BenchmarkQuestionIn) -> dict[str, str]:
+async def benchmark_question_add(set_id: str, body: BenchmarkQuestionIn) -> dict[str, str]:
     db = deps.get_db()
     if not db.get_benchmark_set(set_id):
         raise HTTPException(status_code=404, detail="Benchmark set not found")
@@ -716,7 +716,7 @@ def benchmark_question_add(set_id: str, body: BenchmarkQuestionIn) -> dict[str, 
 
 
 @router.post("/rag-test/benchmarks/{set_id}/run")
-def benchmark_run_batch(
+async def benchmark_run_batch(
     set_id: str,
     body: dict[str, Any],
     settings: Settings = Depends(get_settings),
@@ -809,7 +809,7 @@ def benchmark_run_batch(
 
 
 @router.get("/rag-test/benchmark-runs/{run_id}")
-def benchmark_run_get(run_id: str) -> dict[str, Any]:
+async def benchmark_run_get(run_id: str) -> dict[str, Any]:
     db = deps.get_db()
     row = db.get_benchmark_run(run_id)
     if not row:
@@ -828,12 +828,12 @@ class IndexProfileCreate(BaseModel):
 
 
 @router.get("/rag-test/index-profiles")
-def index_profiles_list() -> list[dict[str, Any]]:
+async def index_profiles_list() -> list[dict[str, Any]]:
     return deps.get_db().list_rag_index_profiles()
 
 
 @router.post("/rag-test/index-profiles", dependencies=[Depends(require_admin)])
-def index_profile_create(body: IndexProfileCreate) -> dict[str, str]:
+async def index_profile_create(body: IndexProfileCreate) -> dict[str, str]:
     pid = str(uuid4())
     deps.get_db().insert_rag_index_profile(
         pid,
@@ -846,7 +846,7 @@ def index_profile_create(body: IndexProfileCreate) -> dict[str, str]:
 
 
 @router.post("/rag-test/index-profiles/{profile_id}/sandbox-reindex", dependencies=[Depends(require_admin)])
-def index_sandbox_reindex_placeholder(profile_id: str) -> dict[str, str]:
+async def index_sandbox_reindex_placeholder(profile_id: str) -> dict[str, str]:
     db = deps.get_db()
     if not db.get_rag_index_profile(profile_id):
         raise HTTPException(status_code=404, detail="Index profile not found")
@@ -873,7 +873,7 @@ def index_sandbox_reindex_placeholder(profile_id: str) -> dict[str, str]:
 
 
 @router.get("/rag-test/index-jobs/{job_id}")
-def index_job_get(job_id: str) -> dict[str, Any]:
+async def index_job_get(job_id: str) -> dict[str, Any]:
     row = deps.get_db().get_rag_index_job(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")

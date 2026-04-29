@@ -65,11 +65,15 @@ def get_chroma_for_tenant(settings: Settings, tenant_id: str) -> ChromaStore:
 
 def get_db() -> MetadataDB:
     tid = current_tenant_id.get()
+    if tid is None:
+        raise RuntimeError("tenant context missing: bind_tenant_context must run before get_db")
     return get_db_for_tenant(get_settings(), tid)
 
 
 def get_chroma() -> ChromaStore:
     tid = current_tenant_id.get()
+    if tid is None:
+        raise RuntimeError("tenant context missing: bind_tenant_context must run before get_chroma")
     return get_chroma_for_tenant(get_settings(), tid)
 
 

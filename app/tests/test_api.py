@@ -363,13 +363,133 @@ def test_chat_export_markdown(client: TestClient) -> None:
     assert "## Цитаты" in text
 
 
-def test_member_forbidden_create_collection(client_rbac: TestClient) -> None:
+def test_member_creates_local_collection_and_uploads(client_rbac: TestClient) -> None:
     r = client_rbac.post(
         "/v1/collections",
-        json={"name": "x"},
+        json={"name": "member-folder"},
         headers={"X-API-Key": "mem-secret"},
     )
-    assert r.status_code == 403
+    assert r.status_code == 200
+    assert r.json().get("name") == "member-folder"
+    assert not r.json().get("mount_issuer_root_collection_id")
+    cid = r.json()["id"]
+    up = client_rbac.post(
+        f"/v1/collections/{cid}/documents",
+        files={"file": ("z.txt", io.BytesIO(b"member upload ok"), "text/plain")},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert up.status_code == 200
+    assert up.json().get("collection_id") == cid
+    docs = client_rbac.get(
+        f"/v1/collections/{cid}/documents",
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert docs.status_code == 200
+    assert any(d.get("filename") == "z.txt" for d in docs.json())
+    chat = client_rbac.post(
+        f"/v1/collections/{cid}/chat",
+        json={"message": "What did the member upload say?"},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert chat.status_code == 200
+    assert len(chat.json().get("citations", [])) >= 1
+
+
+def test_member_can_mount_collection_with_share_token(client_rbac: TestClient) -> None:
+    """member может создать mount-раздел только с валидным mount_share_token (выдаётся admin источника)."""
+    a = client_rbac.post(
+        "/v1/collections",
+        json={"name": "issuer-root"},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert a.status_code == 200
+    src_id = a.json()["id"]
+    shr = client_rbac.post(
+        f"/v1/collections/{src_id}/share",
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert shr.status_code == 200
+    token = shr.json()["share_token"]
+    m = client_rbac.post(
+        "/v1/collections",
+        json={"mount_share_token": token},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert m.status_code == 200
+    body = m.json()
+    assert body.get("mount_issuer_root_collection_id") == src_id
+    assert body.get("mount_issuer_tenant_id")
+
+
+def test_member_cannot_mint_share_token(client_rbac: TestClient) -> None:
+    r = client_rbac.post(
+        "/v1/collections",
+        json={"name": "share-admin-only"},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert r.status_code == 200
+    cid = r.json()["id"]
+    shr = client_rbac.post(
+        f"/v1/collections/{cid}/share",
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert shr.status_code == 403
+
+
+def test_mount_section_mutations_are_read_only(client_rbac: TestClient) -> None:
+    src = client_rbac.post(
+        "/v1/collections",
+        json={"name": "mount-ro-source"},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert src.status_code == 200
+    src_id = src.json()["id"]
+    token = client_rbac.post(
+        f"/v1/collections/{src_id}/share",
+        headers={"X-API-Key": "adm-secret"},
+    ).json()["share_token"]
+    mounted = client_rbac.post(
+        "/v1/collections",
+        json={"mount_share_token": token},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert mounted.status_code == 200
+    mount_id = mounted.json()["id"]
+
+    patch = client_rbac.patch(
+        f"/v1/collections/{mount_id}",
+        json={"name": "nope"},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert patch.status_code == 403
+    upload = client_rbac.post(
+        f"/v1/collections/{mount_id}/documents",
+        files={"file": ("m.txt", io.BytesIO(b"cannot mutate mount"), "text/plain")},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert upload.status_code == 403
+    child = client_rbac.post(
+        "/v1/collections",
+        json={"name": "child-under-mount", "parent_id": mount_id},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert child.status_code == 403
+    delete = client_rbac.delete(
+        f"/v1/collections/{mount_id}",
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert delete.status_code == 403
+
+
+def test_member_mount_invalid_share_token(client_rbac: TestClient) -> None:
+    m = client_rbac.post(
+        "/v1/collections",
+        json={"mount_share_token": "not-a-real-token"},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert m.status_code == 400
+    assert "detail" in m.json()
+    assert "Invalid" in str(m.json()["detail"]) or "revoked" in str(m.json()["detail"]).lower()
 
 
 def test_admin_creates_collection(client_rbac: TestClient) -> None:
@@ -551,7 +671,7 @@ def test_member_can_read_tree_and_stats(client_rbac: TestClient) -> None:
     assert s.status_code == 200
 
 
-def test_member_forbidden_patch_section(client_rbac: TestClient) -> None:
+def test_member_patch_section_created_by_admin(client_rbac: TestClient) -> None:
     r = client_rbac.post(
         "/v1/collections",
         json={"name": "mp"},
@@ -560,14 +680,17 @@ def test_member_forbidden_patch_section(client_rbac: TestClient) -> None:
     cid = r.json()["id"]
     p = client_rbac.patch(
         f"/v1/collections/{cid}",
-        json={"name": "nope"},
+        json={"name": "member-renamed"},
         headers={"X-API-Key": "mem-secret"},
     )
-    assert p.status_code == 403
+    assert p.status_code == 200
+    assert p.json().get("name") == "member-renamed"
 
 
 def test_move_document_between_sections_tree_and_chroma(client: TestClient) -> None:
     from app import deps
+    from app.config import get_settings
+    from app.tenancy import TENANT_ENV_ADMIN
 
     a = client.post("/v1/collections", json={"name": "move-a"}).json()["id"]
     b = client.post("/v1/collections", json={"name": "move-b"}).json()["id"]
@@ -578,7 +701,8 @@ def test_move_document_between_sections_tree_and_chroma(client: TestClient) -> N
     )
     assert up.status_code == 200
     did = up.json()["id"]
-    store = deps.get_chroma()
+    settings = get_settings()
+    store = deps.get_chroma_for_tenant(settings, TENANT_ENV_ADMIN)
     n_before = store.count_chunks_for_document(a, did)
     assert n_before >= 1
     assert store.count_chunks_for_document(b, did) == 0
@@ -654,7 +778,7 @@ def test_move_document_404(client: TestClient) -> None:
     assert r3.status_code == 404
 
 
-def test_member_forbidden_move_document(client_rbac: TestClient) -> None:
+def test_member_moves_document_between_admin_sections(client_rbac: TestClient) -> None:
     a = client_rbac.post(
         "/v1/collections",
         json={"name": "ma"},
@@ -677,7 +801,8 @@ def test_member_forbidden_move_document(client_rbac: TestClient) -> None:
         json={"source_collection_id": a},
         headers={"X-API-Key": "mem-secret"},
     )
-    assert mv.status_code == 403
+    assert mv.status_code == 200
+    assert mv.json().get("collection_id") == b
 
 
 def test_chat_rag_parent_scope_finds_document_in_child_section(client: TestClient) -> None:
@@ -768,6 +893,8 @@ def test_thread_scope_stale_after_document_move_to_other_section(client: TestCli
 def test_copy_document_vectors_idempotent_no_duplicate_chunks(client: TestClient) -> None:
     """Повторное копирование векторов в целевой раздел не удваивает число чанков."""
     from app import deps
+    from app.config import get_settings
+    from app.tenancy import TENANT_ENV_ADMIN
 
     a = client.post("/v1/collections", json={"name": "idemp-a"}).json()["id"]
     b = client.post("/v1/collections", json={"name": "idemp-b"}).json()["id"]
@@ -778,7 +905,8 @@ def test_copy_document_vectors_idempotent_no_duplicate_chunks(client: TestClient
     )
     assert up.status_code == 200
     did = up.json()["id"]
-    store = deps.get_chroma()
+    settings = get_settings()
+    store = deps.get_chroma_for_tenant(settings, TENANT_ENV_ADMIN)
     n_a = store.count_chunks_for_document(a, did)
     assert n_a >= 1
     n_first = store.copy_document_vectors_to_collection(a, b, did)

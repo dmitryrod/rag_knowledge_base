@@ -77,6 +77,40 @@ def test_registry_user_me_display_login(client_session: TestClient) -> None:
     assert len(me["subject"]) == 36
 
 
+def test_registry_user_collections_and_tree_isolated_from_env_admin(
+    client_session: TestClient,
+) -> None:
+    """Новый registry-пользователь без workspace_tenant_id видит пустые коллекции даже если в env_admin они есть."""
+    assert client_session.post(
+        "/v1/auth/login",
+        json={"username": "admin", "password": "adminpass"},
+    ).status_code == 200
+    col = client_session.post("/v1/collections", json={"name": "admin-only-section"})
+    assert col.status_code == 200
+    assert col.json().get("id")
+
+    u = "isolate_member"
+    created = client_session.post(
+        "/v1/admin/users",
+        json={"username": u, "password": "secret789", "site_role": "member"},
+    )
+    assert created.status_code == 201, created.text
+    tenant = created.json()["tenant_id"]
+
+    assert client_session.post("/v1/auth/logout", json={}).status_code == 200
+    assert client_session.post(
+        "/v1/auth/login",
+        json={"username": u, "password": "secret789"},
+    ).status_code == 200
+    me = client_session.get("/v1/auth/me").json()
+    assert me["tenant_id"] == tenant
+
+    rows = client_session.get("/v1/collections").json()
+    tree = client_session.get("/v1/collections/tree").json()
+    assert rows == []
+    assert tree == []
+
+
 def test_tenant_data_paths_after_init(client_session: TestClient) -> None:
     """После init_stores существуют каталоги tenants/env_admin и registry."""
     client_session.post("/v1/auth/login", json={"username": "admin", "password": "adminpass"})

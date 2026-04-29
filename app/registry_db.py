@@ -103,7 +103,7 @@ class RegistryDB:
         return sid
 
     def resolve_share_token(self, plaintext_token: str) -> ShareLink | None:
-        """По секретной строке (показывается один раз при создании) — tenant и корень дерева источника."""
+        """По секретной строке — tenant и корень дерева источника."""
         digest = _sha256_hex(plaintext_token)
         with self._connect() as conn:
             row = conn.execute(

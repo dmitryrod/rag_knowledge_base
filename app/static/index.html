@@ -1709,6 +1709,8 @@
         </div>
       </header>
       <p class="head-status status" id="headStatus"></p>
+      <p id="devAuthBanner" class="status err mono hidden" role="status" style="margin:0.35rem 0 0;font-size:0.85rem"
+        >Без аутентификации (<code>/v1/health</code>: <code>auth_configured: false</code>) все запросы идут в хранилище <code>env_admin</code> как в dev — изоляции пользователей нет. Для многопользовательского режима задайте <code>SESSION_SECRET</code>, <code>ADMIN_LOGIN</code>/<code>ADMIN_PASSWORD</code> и/или ключи из <code>app/.env.example</code>.</p>
 
       <main class="main-area">
         <div id="view-docs" class="view">
@@ -1719,18 +1721,49 @@
 
             <div class="card">
               <h2>База знаний</h2>
-              <p style="color:var(--on-surface-variant); font-size:0.9rem; margin:0.25rem 0 0.75rem 0">Дерево слева. Новый раздел — в корень или в выбранный подраздел (ID родителя подставляется при выборе раздела).</p>
-              <div class="row" style="margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem">
-                <div style="flex:1; min-width:200px">
-                  <label class="field" for="newColName">Новый раздел</label>
-                  <input type="text" id="newColName" placeholder="Имя раздела" />
+              <p style="color:var(--on-surface-variant); font-size:0.9rem; margin:0.25rem 0 0.75rem 0">
+                Дерево слева. <strong>Новый раздел</strong> — в вашем хранилище (родитель из списка или «Корень»).
+                <strong>Импорт по ключу</strong> — по share-token от администратора источника, не по ID папки.
+              </p>
+              <div class="row" style="margin-bottom:0.75rem; flex-wrap:wrap; gap:0.75rem; align-items:flex-start">
+                <div style="flex:1; min-width:240px; border:1px solid var(--outline-variant); border-radius:8px; padding:0.65rem 0.75rem">
+                  <div style="font-weight:600; margin-bottom:0.35rem">Новый раздел</div>
+                  <p style="color:var(--on-surface-variant); font-size:0.82rem; margin:0 0 0.5rem 0">Локальный раздел; при выборе папки в дереве родитель здесь синхронизируется.</p>
+                  <div class="row" style="flex-wrap:wrap; gap:0.5rem; align-items:flex-end">
+                    <div style="flex:1; min-width:160px">
+                      <label class="field" for="newColName">Имя новой локальной папки (раздела) в вашем дереве</label>
+                      <input type="text" id="newColName" placeholder="Например: Регламенты" />
+                    </div>
+                    <div style="flex:1; min-width:220px">
+                      <label class="field" for="newColParentSelect">Родитель</label>
+                      <select id="newColParentSelect" aria-label="Родительский раздел" style="width:100%; max-width:100%; box-sizing:border-box"></select>
+                    </div>
+                    <div style="align-self:flex-end">
+                      <button type="button" class="btn" id="btnCreateCol">Создать</button>
+                    </div>
+                  </div>
+                  <details class="kbdetails" style="margin-top:0.45rem">
+                    <summary style="cursor:pointer; font-size:0.82rem">Родитель по UUID (редко нужно)</summary>
+                    <label class="field" for="newColParentAdv">ID родителя</label>
+                    <input type="text" id="newColParentAdv" class="mono" placeholder="перекрывает выбор списком" autocomplete="off" style="width:100%; box-sizing:border-box" />
+                  </details>
                 </div>
-                <div style="flex:1; min-width:200px">
-                  <label class="field" for="newColParentId">ID родителя (опц.)</label>
-                  <input type="text" id="newColParentId" class="mono" placeholder="корень = пусто" autocomplete="off" />
-                </div>
-                <div style="align-self:flex-end">
-                  <button type="button" class="btn" id="btnCreateCol">Создать</button>
+                <div style="flex:1; min-width:240px; border:1px solid var(--outline-variant); border-radius:8px; padding:0.65rem 0.75rem">
+                  <div style="font-weight:600; margin-bottom:0.35rem">Импорт по ключу</div>
+                  <p style="color:var(--on-surface-variant); font-size:0.82rem; margin:0 0 0.5rem 0">Вставьте <strong>share_token</strong>, который admin источника получает кнопкой «Выдать ключ» на выбранном разделе. UUID раздела сюда не подходит.</p>
+                  <div class="row" style="flex-wrap:wrap; gap:0.5rem; align-items:flex-end">
+                    <div style="flex:1; min-width:160px">
+                      <label class="field" for="mountShareToken">Ключ импорта (share_token)</label>
+                      <input type="text" id="mountShareToken" class="mono" placeholder="например: длинный секрет из «Выдать ключ», не UUID папки" autocomplete="off" />
+                    </div>
+                    <div style="flex:1; min-width:220px">
+                      <label class="field" for="mountColParentSelect">Родитель (опц.)</label>
+                      <select id="mountColParentSelect" aria-label="Куда поместить импорт" style="width:100%; max-width:100%; box-sizing:border-box"></select>
+                    </div>
+                    <div style="align-self:flex-end">
+                      <button type="button" class="btn" id="btnMountCol">Импорт</button>
+                    </div>
+                  </div>
                 </div>
                 <div style="align-self:flex-end">
                   <button type="button" class="btn secondary" id="btnRefreshCols">Обновить</button>
@@ -1738,6 +1771,7 @@
               </div>
               <p id="newColParentHint" class="sidebar-hint" style="display:none; margin:0 0 0.5rem 0; font-size:0.8rem"></p>
               <div id="colErr" class="status err"></div>
+              <div id="mountErr" class="status err" style="margin-top:0.25rem"></div>
               <table id="tblCols"><thead><tr><th>ID</th><th>Имя</th><th></th></tr></thead><tbody></tbody></table>
             </div>
 
@@ -1750,8 +1784,10 @@
                 <p class="mono" id="selId"></p>
                 <div class="row" style="margin:0.4rem 0; gap:0.35rem; flex-wrap:wrap">
                   <button type="button" class="btn secondary" id="btnEditSection">Переименовать</button>
+                  <button type="button" class="btn secondary" id="btnShareSection">Выдать ключ</button>
                   <button type="button" class="btn danger" id="btnDelCol">Удалить раздел</button>
                 </div>
+                <div id="shareSectionOut" class="status mono" style="font-size:0.8rem; white-space:pre-wrap"></div>
                 <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:1rem 0 0.4rem 0">Подразделы</h3>
                 <ul id="sectionChildrenList" class="kb-inline-list" style="list-style:none; padding:0; margin:0 0 0.75rem 0; min-height:0"></ul>
                 <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Загрузка</h3>
@@ -2844,7 +2880,9 @@
       if ($("colPanel")) $("colPanel").classList.add("hidden");
       if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
       if ($("newColParentHint")) { $("newColParentHint").style.display = "none"; }
-      if ($("newColParentId")) $("newColParentId").value = "";
+      if ($("newColParentSelect")) $("newColParentSelect").value = "";
+      if ($("mountColParentSelect")) $("mountColParentSelect").value = "";
+      if ($("newColParentAdv")) $("newColParentAdv").value = "";
       clearKbDocMultiSelect();
       markTreeActive();
     }
@@ -3224,6 +3262,24 @@
     }
     /** Ошибки в UI — через errBox / showHead; не использовать alert(). */
     function errBox(el, e) { el.textContent = e || ""; }
+    /** Человекочитаемое сообщение из тела ответа API (403 admin, JSON detail). */
+    function formatHttpError(status, textBody) {
+      const raw = (textBody || "").trim();
+      try {
+        const j = JSON.parse(raw);
+        const d = j.detail;
+        if (typeof d === "string") {
+          if (status === 403 && (d === "Admin role required" || d.indexOf("Admin role") >= 0)) {
+            return "Создание раздела доступно только администратору.";
+          }
+          return d;
+        }
+        if (Array.isArray(d)) {
+          return d.map((x) => (x.msg || x.type || JSON.stringify(x))).join("; ");
+        }
+      } catch (_) { /* */ }
+      return raw || ("HTTP " + status);
+    }
     function showHead(s, ok) {
       const n = $("headStatus");
       n.textContent = s;
@@ -3489,8 +3545,9 @@
       const me = window.__AUTH_ME;
       const demo = me && me.is_demo;
       [
-        "btnCreateCol","btnRefreshCols","btnUpload","btnDelCol","btnEditSection",
-        "fileIn","dropZone","btnDelDocFromDetail","btnEditDoc","newColName","newColParentId"
+        "btnCreateCol","btnMountCol","btnRefreshCols","btnUpload","btnDelCol","btnEditSection","btnShareSection",
+        "fileIn","dropZone","btnDelDocFromDetail","btnEditDoc","newColName","newColParentSelect","newColParentAdv",
+        "mountShareToken","mountColParentSelect"
       ].forEach((id) => {
         const el = $(id);
         if (!el) return;
@@ -3588,6 +3645,8 @@
           $("loginPass").value = "";
           clearHeadStatus();
           await loadHealth();
+          clearStoredApiKeyAfterSessionLogin();
+          applyAuthUi();
         } catch (e) {
           if (err) { err.textContent = String(e); err.classList.remove("hidden"); }
         }
@@ -4794,6 +4853,22 @@
       if (t.indexOf("вышли") >= 0) clearHeadStatus();
     }
 
+    function applyDevAuthBanner() {
+      const el = $("devAuthBanner");
+      if (!el) return;
+      if (!authConfigured) el.classList.remove("hidden");
+      else el.classList.add("hidden");
+    }
+
+    /** После успешного входа по паролю убираем сохранённый X-API-Key из UI/storage: иначе при отсутствии cookie возможен fallback на ключ и тенант env_admin. Сессионные запросы к серверу читают cookie раньше ключа (`app/auth_dep.py`). */
+    function clearStoredApiKeyAfterSessionLogin() {
+      if (!sessionLoginConfigured) return;
+      try {
+        localStorage.removeItem(keyStore);
+      } catch (e) { /* ignore */ }
+      if ($("apiKey")) $("apiKey").value = "";
+    }
+
     async function syncAuthFingerprintAndReloadCollectionsIfTenantChanged() {
       const me = window.__AUTH_ME;
       const fp = me ? String(me.tenant_id || "") + "\t" + String(me.subject || "") : "";
@@ -4841,6 +4916,7 @@
         } catch (_) { window.__AUTH_ME = null; }
         await syncAuthFingerprintAndReloadCollectionsIfTenantChanged();
         clearStaleLogoutBannerFromHead();
+        applyDevAuthBanner();
         applyLoginGate();
         applyDemoRestrictions();
         loadUsersAdmin();
@@ -4851,6 +4927,7 @@
         applyAuthUi();
         $("healthOut").textContent = String(e);
         $("healthOut").className = "status err mono";
+        applyDevAuthBanner();
         applyLoginGate();
         applyDemoRestrictions();
       }
@@ -5011,6 +5088,67 @@
       });
     }
 
+    function syncKnowledgeParentSelects() {
+      var newSel = $("newColParentSelect");
+      var mountSel = $("mountColParentSelect");
+      var pn = newSel ? newSel.value : "";
+      var pm = mountSel ? mountSel.value : "";
+      var parentCandidates = collections.filter(function(c) {
+        return !(c.mount_issuer_root_collection_id || c.mount_issuer_tenant_id);
+      });
+      var byParent = {};
+      parentCandidates.forEach(function(c) {
+        var pid = c.parent_id || "";
+        if (!byParent[pid]) byParent[pid] = [];
+        byParent[pid].push(c);
+      });
+      Object.keys(byParent).forEach(function(pid) {
+        byParent[pid].sort(function(a, b) {
+          return String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+        });
+      });
+      var ordered = [];
+      var seen = {};
+      function walk(pid, depth) {
+        var list = byParent[pid || ""] || [];
+        for (var i = 0; i < list.length; i++) {
+          var c = list[i];
+          if (seen[c.id]) continue;
+          seen[c.id] = true;
+          ordered.push({ collection: c, depth: depth });
+          walk(c.id, depth + 1);
+        }
+      }
+      walk("", 0);
+      parentCandidates.forEach(function(c) {
+        if (!seen[c.id]) {
+          seen[c.id] = true;
+          ordered.push({ collection: c, depth: 0 });
+        }
+      });
+      function fill(sel, prev) {
+        if (!sel) return;
+        sel.innerHTML = "";
+        var root = document.createElement("option");
+        root.value = "";
+        root.textContent = "Корень";
+        sel.appendChild(root);
+        for (var i = 0; i < ordered.length; i++) {
+          var c = ordered[i].collection;
+          var opt = document.createElement("option");
+          opt.value = c.id;
+          var nm = String(c.name || "").trim();
+          opt.textContent = Array(ordered[i].depth + 1).join("  ") + (ordered[i].depth ? "↳ " : "") + (nm || c.id) + " — " + String(c.id).slice(0, 8) + "…";
+          sel.appendChild(opt);
+        }
+        var vals = [];
+        for (var j = 0; j < sel.options.length; j++) vals.push(sel.options[j].value);
+        if (prev && vals.indexOf(prev) >= 0) sel.value = prev;
+      }
+      fill(newSel, pn);
+      fill(mountSel, pm);
+    }
+
     function selectCollection(c) {
       selectedCid = c.id;
       localStorage.setItem(cidStore, selectedCid);
@@ -5021,10 +5159,28 @@
       if ($("colPanel")) $("colPanel").classList.remove("hidden");
       if ($("docsNoSelection")) $("docsNoSelection").classList.add("hidden");
       if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
-      if ($("newColParentId")) $("newColParentId").value = c.id;
+      if ($("newColParentSelect")) {
+        const ns = $("newColParentSelect");
+        const ids = []; for (let i = 0; i < ns.options.length; i++) ids.push(ns.options[i].value);
+        if (ids.indexOf(c.id) >= 0) ns.value = c.id;
+      }
+      if ($("mountColParentSelect")) {
+        const ms = $("mountColParentSelect");
+        const mid = []; for (let i = 0; i < ms.options.length; i++) mid.push(ms.options[i].value);
+        if (mid.indexOf(c.id) >= 0) ms.value = c.id;
+      }
+      if ($("newColParentAdv")) $("newColParentAdv").value = "";
       if ($("newColParentHint")) {
         $("newColParentHint").style.display = "block";
-        $("newColParentHint").textContent = "Новый подраздел по умолчанию внутри: " + c.name + " (очистите поле ID для корня).";
+        $("newColParentHint").textContent =
+          "Родитель для нового раздела и импорта совпадает с выбранной папкой «" + (c.name || "") + "». Выберите «Корень» или другой раздел в списках при необходимости.";
+      }
+      if ($("shareSectionOut")) $("shareSectionOut").textContent = "";
+      if ($("btnShareSection")) {
+        const mounted = !!(c.mount_issuer_root_collection_id || c.mount_issuer_tenant_id);
+        const demo = window.__AUTH_ME && window.__AUTH_ME.is_demo;
+        $("btnShareSection").disabled = mounted || !!demo;
+        $("btnShareSection").title = mounted ? "Монтированный раздел нельзя расшарить повторно" : "Выдать share_token для импорта этого раздела другим tenant";
       }
       fillSectionChildrenFromTree(c.id);
       loadDocs();
@@ -5033,6 +5189,7 @@
 
     async function loadCollections() {
       errBox($("colErr"), "");
+      if ($("mountErr")) errBox($("mountErr"), "");
       const tb = document.querySelector("#tblCols tbody");
       tb.innerHTML = "";
       collections.length = 0;
@@ -5052,6 +5209,7 @@
           tr.appendChild(tId); tr.appendChild(tNm); tr.appendChild(tAct);
           tb.appendChild(tr);
         }
+        syncKnowledgeParentSelects();
         loadRagScopeFromStorage();
         buildRagScopeUi();
         loadTestScopeFromStorage();
@@ -5074,19 +5232,42 @@
         buildTestScopeUi();
       }
     }
-    $("btnRefreshCols").onclick = () => { errBox($("colErr"), ""); loadCollections(); };
+    $("btnRefreshCols").onclick = () => { errBox($("colErr"), ""); if ($("mountErr")) errBox($("mountErr"), ""); loadCollections(); };
     $("btnCreateCol").onclick = async () => {
       errBox($("colErr"), "");
       const name = $("newColName").value.trim();
       if (!name) return;
-      const p = $("newColParentId") && $("newColParentId").value.trim();
+      let p = $("newColParentSelect") && $("newColParentSelect").value.trim();
+      var advRaw = $("newColParentAdv") && $("newColParentAdv").value.trim();
+      if (advRaw) p = advRaw;
       const body = { name: name, parent_id: p || null };
       try {
         const r = await fetchWithCred(apiPath("/v1/collections"), { method: "POST", headers: headers(true), body: JSON.stringify(body) });
-        if (!r.ok) throw new Error(await r.text());
+        const t = await r.text();
+        if (!r.ok) throw new Error(formatHttpError(r.status, t));
         $("newColName").value = "";
         await loadCollections();
       } catch (e) { errBox($("colErr"), String(e)); }
+    };
+    if ($("btnMountCol")) $("btnMountCol").onclick = async () => {
+      if ($("mountErr")) errBox($("mountErr"), "");
+      const tok = $("mountShareToken").value.trim();
+      if (!tok) return;
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tok)) {
+        if ($("mountErr")) errBox($("mountErr"), "Это похоже на UUID раздела. Для импорта нужен share_token: зайдите admin-аккаунтом владельца, выберите исходный раздел и нажмите «Выдать ключ».");
+        return;
+      }
+      var pMount = $("mountColParentSelect") && $("mountColParentSelect").value.trim();
+      const body = { mount_share_token: tok, parent_id: pMount || null };
+      try {
+        const r = await fetchWithCred(apiPath("/v1/collections"), { method: "POST", headers: headers(true), body: JSON.stringify(body) });
+        const t = await r.text();
+        if (!r.ok) throw new Error(formatHttpError(r.status, t));
+        $("mountShareToken").value = "";
+        await loadCollections();
+      } catch (e) {
+        if ($("mountErr")) errBox($("mountErr"), String(e));
+      }
     };
 
     async function loadDocs() {
@@ -5213,6 +5394,26 @@
         if (!selectedCid) return;
         const node = findSectionNode(selectedCid);
         if (node) editSectionDialog(node);
+      };
+    }
+    if ($("btnShareSection")) {
+      $("btnShareSection").onclick = async () => {
+        if (!selectedCid) return;
+        if ($("shareSectionOut")) $("shareSectionOut").textContent = "";
+        errBox($("colErr"), "");
+        try {
+          const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/share"), { method: "POST", headers: headers(false) });
+          const t = await r.text();
+          if (!r.ok) throw new Error(formatHttpError(r.status, t));
+          const data = JSON.parse(t);
+          const token = String(data.share_token || "");
+          if ($("shareSectionOut")) $("shareSectionOut").textContent = "share_token:\n" + token;
+          if (token && navigator.clipboard && navigator.clipboard.writeText) {
+            try { await navigator.clipboard.writeText(token); } catch (e) { /* clipboard is optional */ }
+          }
+        } catch (e) {
+          errBox($("colErr"), String(e));
+        }
       };
     }
     if ($("btnEditDoc")) {
@@ -5353,20 +5554,16 @@
     async function loadThreads() {
       const ul = $("chat-thread-list");
       ul.innerHTML = "";
-      if (!canUseChatRag()) {
-        $("btnNewChat").disabled = true;
-        chatMessagesSnapshot = [];
-        renderMessages([]);
-        return;
-      }
-      $("btnNewChat").disabled = false;
+      $("btnNewChat").disabled = !canUseChatRag();
       try {
-        const o = getRagScopeObject();
-        const ragParam = o.all ? JSON.stringify({ all: true }) : JSON.stringify({ ids: o.ids });
-        const r = await fetchWithCred(
-          apiPath("/v1/chat/threads?rag=" + encodeURIComponent(ragParam)),
-          { headers: headers(false) }
-        );
+        const useRag = canUseChatRag();
+        let url = apiPath("/v1/chat/threads");
+        if (useRag) {
+          const o = getRagScopeObject();
+          const ragParam = o.all ? JSON.stringify({ all: true }) : JSON.stringify({ ids: o.ids });
+          url += "?rag=" + encodeURIComponent(ragParam);
+        }
+        const r = await fetchWithCred(url, { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const threads = await r.json();
         const saved = localStorage.getItem(threadStore);

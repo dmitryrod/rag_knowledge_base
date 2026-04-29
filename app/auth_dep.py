@@ -226,9 +226,19 @@ def require_app_admin(principal: Annotated[Principal, Depends(get_principal)]) -
         raise HTTPException(status_code=403, detail="Admin role required")
 
 
-def forbid_demo_writes(principal: Annotated[Principal, Depends(get_principal)]) -> None:
+def raise_if_demo_write_blocked(principal: Principal) -> None:
+    """То же ограничение, что forbid_demo_writes, но вызываемо из тела обработчика."""
     if principal.site_role == "demo":
         raise HTTPException(status_code=403, detail="Not allowed for demo role")
+
+
+def forbid_demo_writes(principal: Annotated[Principal, Depends(get_principal)]) -> None:
+    raise_if_demo_write_blocked(principal)
+
+
+def require_knowledge_writer(principal: Annotated[Principal, Depends(get_principal)]) -> None:
+    """Мутации knowledge (разделы, документы) для admin/member; без записи для demo."""
+    raise_if_demo_write_blocked(principal)
 
 
 def display_login_for_principal(p: Principal, registry: RegistryDB) -> str | None:

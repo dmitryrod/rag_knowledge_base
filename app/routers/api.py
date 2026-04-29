@@ -28,6 +28,7 @@ from app.auth_dep import (
     get_principal,
     is_auth_configured,
     require_admin,
+    require_knowledge_writer,
     should_filter_chat_by_owner,
 )
 from app.chat_service import run_chat
@@ -49,7 +50,7 @@ from app.config import Settings, get_settings, is_polza_model_allowlisted, is_se
 from app.debug_dep import is_client_debug
 from app.ingest import chunk_text, extract_text
 from app.llm import LlmUpstreamError
-from app.request_tenant import current_tenant_id
+from app.request_tenant import require_bound_tenant_id
 from app.tenancy import tenant_dir
 from app import deps
 
@@ -262,6 +263,20 @@ def _forbid_mount_mutate(db: Any, collection_id: str) -> None:
         )
 
 
+def _validate_writable_parent(db: Any, parent_id: str | None) -> None:
+    if not parent_id:
+        return
+    if parent_id == RAG_ALL_PLACEHOLDER_ID:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot create section under reserved system collection",
+        )
+    parent = db.get_collection(parent_id)
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent collection not found")
+    _forbid_mount_mutate(db, parent_id)
+
+
 def _build_knowledge_tree() -> list[CollectionTreeNode]:
     db = deps.get_db()
     settings = get_settings()
@@ -334,7 +349,7 @@ def _retrieval_chroma_targets_and_labels(
             subtree_postorder=db.collection_subtree_postorder,
             valid=sreal,
         )
-    ltid = current_tenant_id.get()
+    ltid = require_bound_tenant_id()
     chroma_targets = expand_local_collection_ids_to_chroma_targets(
         settings, ltid, db, logical
     )
@@ -357,14 +372,14 @@ def _legacy_chat_collection_ids_and_labels(
         subtree_postorder=db.collection_subtree_postorder,
         valid=sreal,
     )
-    ltid = current_tenant_id.get()
+    ltid = require_bound_tenant_id()
     targets = expand_local_collection_ids_to_chroma_targets(settings, ltid, db, logical)
     labs = collection_labels_for_chroma_targets(settings, targets)
     return targets, labs
 
 
 @public.get("/health")
-def health(settings: Settings = Depends(get_settings)) -> dict[str, str | bool]:
+async def health(settings: Settings = Depends(get_settings)) -> dict[str, str | bool]:
     return {
         "status": "ok",
         "version": "0.5.0",
@@ -375,11 +390,11 @@ def health(settings: Settings = Depends(get_settings)) -> dict[str, str | bool]:
 
 
 @router.post("/collections/{collection_id}/share", dependencies=[Depends(require_admin), Depends(forbid_demo_writes)])
-def mint_collection_share(
+async def mint_collection_share(
     collection_id: str,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
-    """Одноразовый секрет для монтирования дерева раздела в другом tenant (см. POST /collections с mount_share_token)."""
+    """Секрет для монтирования дерева раздела в другом tenant (см. POST /collections с mount_share_token)."""
     if collection_id == RAG_ALL_PLACEHOLDER_ID:
         raise HTTPException(status_code=400, detail="Reserved system collection")
     db = deps.get_db()
@@ -389,16 +404,17 @@ def mint_collection_share(
     if db.is_collection_mount(collection_id):
         raise HTTPException(status_code=400, detail="Cannot share a mounted section")
     token = secrets.token_urlsafe(48)
-    issuer_tenant = current_tenant_id.get()
+    issuer_tenant = require_bound_tenant_id()
     deps.get_registry().create_share_link(issuer_tenant, collection_id, token)
     db.audit("collection.share", f"id={collection_id} issuer_tenant={issuer_tenant}")
     return {"share_token": token}
 
 
-@router.post("/collections", response_model=CollectionOut, dependencies=[Depends(require_admin)])
-def create_collection(
+@router.post("/collections", response_model=CollectionOut)
+async def create_collection(
     body: CollectionCreate,
     settings: Settings = Depends(get_settings),
+    _: None = Depends(require_knowledge_writer),
 ) -> CollectionOut:
     db = deps.get_db()
     share_raw = (body.mount_share_token or "").strip()
@@ -406,15 +422,7 @@ def create_collection(
         link = deps.get_registry().resolve_share_token(share_raw)
         if link is None:
             raise HTTPException(status_code=400, detail="Invalid or revoked share_token")
-        if body.parent_id:
-            if body.parent_id == RAG_ALL_PLACEHOLDER_ID:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot create section under reserved system collection",
-                )
-            parent = db.get_collection(body.parent_id)
-            if not parent:
-                raise HTTPException(status_code=404, detail="Parent collection not found")
+        _validate_writable_parent(db, body.parent_id)
         issuer_db = deps.get_db_for_tenant(settings, link.issuer_tenant_id)
         if not issuer_db.get_collection(link.issuer_root_collection_id):
             raise HTTPException(status_code=404, detail="Share source collection missing")
@@ -432,15 +440,8 @@ def create_collection(
         row = db.get_collection(cid)
         assert row
         return _collection_row_to_out(row)
-    if body.parent_id:
-        if body.parent_id == RAG_ALL_PLACEHOLDER_ID:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot create section under reserved system collection",
-            )
-        parent = db.get_collection(body.parent_id)
-        if not parent:
-            raise HTTPException(status_code=404, detail="Parent collection not found")
+
+    _validate_writable_parent(db, body.parent_id)
     cid = db.create_collection(body.name, parent_id=body.parent_id)
     db.audit(
         "collection.create",
@@ -452,19 +453,19 @@ def create_collection(
 
 
 @router.get("/collections", response_model=list[CollectionOut])
-def list_collections() -> list[CollectionOut]:
+async def list_collections() -> list[CollectionOut]:
     db = deps.get_db()
     rows = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
     return [_collection_row_to_out(r) for r in rows]
 
 
 @router.get("/collections/tree", response_model=list[CollectionTreeNode])
-def get_collections_tree() -> list[CollectionTreeNode]:
+async def get_collections_tree() -> list[CollectionTreeNode]:
     return _build_knowledge_tree()
 
 
 @router.get("/knowledge/stats", response_model=KnowledgeStatsOut)
-def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStatsOut:
+async def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStatsOut:
     db = deps.get_db()
     store = deps.get_chroma()
     user_ids = [
@@ -474,7 +475,7 @@ def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStat
     ]
     doc_agg = db.documents_aggregate()
     chunks = store.total_embeddings_for_collection_ids(user_ids)
-    tid = current_tenant_id.get()
+    tid = require_bound_tenant_id()
     td = tenant_dir(settings.data_dir, tid)
     meta_path = td / "metadata.db"
     chroma_dir = td / "chroma"
@@ -496,22 +497,16 @@ def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStat
 @router.patch(
     "/collections/{collection_id}",
     response_model=CollectionOut,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_knowledge_writer)],
 )
-def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut:
+async def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut:
     if collection_id == RAG_ALL_PLACEHOLDER_ID:
         raise HTTPException(status_code=400, detail="Reserved system collection")
     db = deps.get_db()
     row = db.get_collection(collection_id)
     if not row:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if db.is_collection_mount(collection_id):
-        pdata = body.model_dump(exclude_unset=True)
-        if "parent_id" in pdata:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot reparent a mounted section; delete and recreate the mount.",
-            )
+    _forbid_mount_mutate(db, collection_id)
     data = body.model_dump(exclude_unset=True)
     new_name: str | None = None
     if "name" in data and data["name"] is not None:
@@ -524,9 +519,7 @@ def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut
                 detail="Cannot move section under reserved system collection",
             )
         if np is not None:
-            pr = db.get_collection(str(np))
-            if not pr:
-                raise HTTPException(status_code=404, detail="Parent collection not found")
+            _validate_writable_parent(db, str(np))
             if db.would_parent_create_cycle(collection_id, str(np)):
                 raise HTTPException(
                     status_code=400,
@@ -544,17 +537,14 @@ def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut
     return _collection_row_to_out(out)
 
 
-@router.delete("/collections/{collection_id}", dependencies=[Depends(require_admin)])
-def delete_collection(collection_id: str, settings: Settings = Depends(get_settings)) -> dict[str, str]:
+@router.delete("/collections/{collection_id}", dependencies=[Depends(require_knowledge_writer)])
+async def delete_collection(collection_id: str, settings: Settings = Depends(get_settings)) -> dict[str, str]:
     if collection_id == RAG_ALL_PLACEHOLDER_ID:
         raise HTTPException(status_code=400, detail="Reserved system collection")
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
-    if db.is_collection_mount(collection_id):
-        db.delete_collection(collection_id)
-        db.audit("collection.delete.mount", f"id={collection_id}")
-        return {"status": "deleted", "id": collection_id}
+    _forbid_mount_mutate(db, collection_id)
     order = db.collection_subtree_postorder(collection_id)
     store = deps.get_chroma()
     for cid in order:
@@ -564,7 +554,7 @@ def delete_collection(collection_id: str, settings: Settings = Depends(get_setti
     return {"status": "deleted", "id": collection_id}
 
 
-@router.post("/collections/{collection_id}/documents", dependencies=[Depends(require_admin)])
+@router.post("/collections/{collection_id}/documents", dependencies=[Depends(require_knowledge_writer)])
 async def upload_document(
     collection_id: str,
     file: Annotated[UploadFile, File(...)],
@@ -610,7 +600,7 @@ async def upload_document(
 
 
 @router.get("/collections/{collection_id}/documents")
-def list_documents(collection_id: str) -> list[dict]:
+async def list_documents(collection_id: str) -> list[dict]:
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -619,9 +609,9 @@ def list_documents(collection_id: str) -> list[dict]:
 
 @router.delete(
     "/collections/{collection_id}/documents/{document_id}",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_knowledge_writer)],
 )
-def delete_document(collection_id: str, document_id: str) -> dict[str, str]:
+async def delete_document(collection_id: str, document_id: str) -> dict[str, str]:
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -636,9 +626,9 @@ def delete_document(collection_id: str, document_id: str) -> dict[str, str]:
 
 @router.patch(
     "/collections/{collection_id}/documents/{document_id}",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_knowledge_writer)],
 )
-def patch_document(
+async def patch_document(
     collection_id: str, document_id: str, body: DocumentPatch
 ) -> dict[str, Any]:
     db = deps.get_db()
@@ -664,9 +654,9 @@ def patch_document(
 
 @router.post(
     "/collections/{target_collection_id}/documents/{document_id}/move",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_knowledge_writer)],
 )
-def move_document(
+async def move_document(
     target_collection_id: str, document_id: str, body: DocumentMoveIn
 ) -> dict[str, Any]:
     """Перемещает документ в другой раздел: Chroma-чанки + `documents.collection_id`."""
@@ -774,7 +764,7 @@ def _rethrow_chat_error(
 
 
 @router.post("/collections/{collection_id}/chat", response_model=ChatOut)
-def chat(
+async def chat(
     collection_id: str,
     body: ChatIn,
     settings: Settings = Depends(get_settings),
@@ -856,7 +846,7 @@ def _format_export(answer: str, citations: list[dict], fmt: str) -> str:
     response_class=PlainTextResponse,
     dependencies=[Depends(forbid_demo_writes)],
 )
-def chat_export(
+async def chat_export(
     collection_id: str,
     body: ChatIn,
     settings: Settings = Depends(get_settings),
@@ -918,7 +908,7 @@ def _get_thread_or_404(thread_id: str, principal: Principal) -> dict[str, Any]:
 
 
 @router.get("/chat/threads", response_model=list[ChatThreadOut])
-def list_chat_threads(
+async def list_chat_threads(
     collection_id: str | None = Query(
         default=None,
         description="Legacy: только треды с одним разделом (без rag multi/all)",
@@ -967,7 +957,7 @@ def list_chat_threads(
 
 
 @router.post("/chat/threads", response_model=ChatThreadOut)
-def create_chat_thread(
+async def create_chat_thread(
     body: ChatThreadCreate, principal: Principal = Depends(get_principal)
 ) -> ChatThreadOut:
     db = deps.get_db()
@@ -1007,7 +997,7 @@ def create_chat_thread(
 
 
 @router.get("/chat/threads/{thread_id}/messages", response_model=list[ChatMessageOut])
-def list_chat_messages(
+async def list_chat_messages(
     thread_id: str,
     principal: Principal = Depends(get_principal),
 ) -> list[ChatMessageOut]:
@@ -1028,7 +1018,7 @@ def list_chat_messages(
 
 
 @router.patch("/chat/threads/{thread_id}", response_model=ChatThreadOut)
-def patch_chat_thread(
+async def patch_chat_thread(
     thread_id: str,
     body: ChatThreadPatch,
     principal: Principal = Depends(get_principal),
@@ -1044,7 +1034,7 @@ def patch_chat_thread(
 
 
 @router.delete("/chat/threads/{thread_id}")
-def delete_chat_thread(
+async def delete_chat_thread(
     thread_id: str,
     principal: Principal = Depends(get_principal),
 ) -> dict[str, str]:
@@ -1056,7 +1046,7 @@ def delete_chat_thread(
 
 
 @router.post("/chat/threads/{thread_id}/messages", response_model=ChatOut)
-def chat_in_thread(
+async def chat_in_thread(
     thread_id: str,
     body: ChatIn,
     settings: Settings = Depends(get_settings),
@@ -1132,5 +1122,5 @@ def chat_in_thread(
 
 
 @router.get("/audit", dependencies=[Depends(require_admin)])
-def audit_list(limit: int = 50) -> list[dict]:
+async def audit_list(limit: int = 50) -> list[dict]:
     return deps.get_db().list_audit(limit=min(limit, 500))
