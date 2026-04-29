@@ -8,3 +8,8 @@ app/.env
 .mypy_cache
 htmlcov
 *.egg-info
+.env
+.env.local
+dist/
+build/
+local-dist/

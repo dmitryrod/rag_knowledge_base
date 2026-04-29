@@ -1,1 +1,0 @@
-Placeholder output from presentations/scripts/polza_marp_images.py
