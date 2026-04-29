@@ -1,9 +1,12 @@
 .cursor/
-*.cursor/*
+.vscode/
 .env
 .env.local
+app/.env
+app/.env.local
 .venv/
 venv/
+.git
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -12,9 +15,5 @@ __pycache__/
 dist/
 build/
 local-dist/
-app/.env
-app/data/
-app/config.py
-app/__pycache__
-.vscode/
+app/docs/
 presentations/
