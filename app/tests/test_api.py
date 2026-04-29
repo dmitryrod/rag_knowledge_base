@@ -88,6 +88,7 @@ def test_root_serves_admin_ui(client: TestClient) -> None:
     assert "scrollHeight" in r.text
     assert 'id="btnLogout"' in r.text
     assert 'id="topbarSession"' in r.text
+    assert "displaySubjectForUi" in r.text
 
 
 def test_cors_allows_preflight_for_health(client: TestClient) -> None:

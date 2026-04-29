@@ -100,6 +100,8 @@ class MetadataDB:
             self._ensure_chat_threads_rag_column(conn)
             self._init_rag_test_schema(conn)
             self._ensure_collections_parent_id(conn)
+            self._ensure_collections_mount_columns(conn)
+            self._ensure_chat_threads_owner_subject(conn)
             conn.commit()
         self._ensure_rag_all_collection()
 
@@ -120,6 +122,24 @@ class MetadataDB:
             "ON collections(parent_id)"
         )
 
+    def _ensure_collections_mount_columns(self, conn: sqlite3.Connection) -> None:
+        cur = conn.execute("PRAGMA table_info(collections)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "mount_issuer_tenant_id" not in cols:
+            conn.execute("ALTER TABLE collections ADD COLUMN mount_issuer_tenant_id TEXT")
+        if "mount_issuer_root_collection_id" not in cols:
+            conn.execute("ALTER TABLE collections ADD COLUMN mount_issuer_root_collection_id TEXT")
+
+    def _ensure_chat_threads_owner_subject(self, conn: sqlite3.Connection) -> None:
+        cur = conn.execute("PRAGMA table_info(chat_threads)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "owner_subject" not in cols:
+            conn.execute("ALTER TABLE chat_threads ADD COLUMN owner_subject TEXT")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chat_threads_owner "
+                "ON chat_threads(owner_subject)"
+            )
+
     def _ensure_rag_all_collection(self) -> None:
         """Служебный раздел для тредов «по всем коллекциям» (FK)."""
         with self._connect() as conn:
@@ -133,7 +153,17 @@ class MetadataDB:
             has_parent = "parent_id" in [
                 x[1] for x in conn.execute("PRAGMA table_info(collections)").fetchall()
             ]
-            if has_parent:
+            has_mount = "mount_issuer_tenant_id" in [
+                x[1] for x in conn.execute("PRAGMA table_info(collections)").fetchall()
+            ]
+            if has_parent and has_mount:
+                conn.execute(
+                    "INSERT INTO collections (id, name, created_at, parent_id, "
+                    "mount_issuer_tenant_id, mount_issuer_root_collection_id) "
+                    "VALUES (?, ?, ?, ?, NULL, NULL)",
+                    (RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME, ts, None),
+                )
+            elif has_parent:
                 conn.execute(
                     "INSERT INTO collections (id, name, created_at, parent_id) VALUES (?, ?, ?, ?)",
                     (RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME, ts, None),
@@ -166,23 +196,55 @@ class MetadataDB:
         ts = utc_now_iso()
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO collections (id, name, created_at, parent_id) VALUES (?, ?, ?, ?)",
+                "INSERT INTO collections (id, name, created_at, parent_id, "
+                "mount_issuer_tenant_id, mount_issuer_root_collection_id) "
+                "VALUES (?, ?, ?, ?, NULL, NULL)",
                 (cid, name, ts, parent_id),
             )
             conn.commit()
         return cid
 
+    def create_mount_collection(
+        self,
+        name: str,
+        *,
+        parent_id: str | None,
+        mount_issuer_tenant_id: str,
+        mount_issuer_root_collection_id: str,
+        coll_id: str | None = None,
+    ) -> str:
+        """Раздел только для монтирования чужого дерева (метаданные + RAG делегируются)."""
+        cid = coll_id or str(uuid4())
+        ts = utc_now_iso()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO collections (id, name, created_at, parent_id, "
+                "mount_issuer_tenant_id, mount_issuer_root_collection_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (cid, name, ts, parent_id, mount_issuer_tenant_id, mount_issuer_root_collection_id),
+            )
+            conn.commit()
+        return cid
+
+    def is_collection_mount(self, coll_id: str) -> bool:
+        row = self.get_collection(coll_id)
+        if not row:
+            return False
+        return bool(row.get("mount_issuer_tenant_id") and row.get("mount_issuer_root_collection_id"))
+
     def list_collections(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, name, created_at, parent_id FROM collections ORDER BY created_at DESC"
+                "SELECT id, name, created_at, parent_id, mount_issuer_tenant_id, "
+                "mount_issuer_root_collection_id FROM collections ORDER BY created_at DESC"
             ).fetchall()
         return [dict(r) for r in rows]
 
     def get_collection(self, coll_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, name, created_at, parent_id FROM collections WHERE id = ?",
+                "SELECT id, name, created_at, parent_id, mount_issuer_tenant_id, "
+                "mount_issuer_root_collection_id FROM collections WHERE id = ?",
                 (coll_id,),
             ).fetchone()
         return dict(row) if row else None
@@ -396,6 +458,8 @@ class MetadataDB:
         collection_id: str,
         title: str | None = None,
         rag_scope: dict[str, Any] | None = None,
+        *,
+        owner_subject: str | None = None,
     ) -> dict[str, Any]:
         tid = str(uuid4())
         ts = utc_now_iso()
@@ -404,10 +468,10 @@ class MetadataDB:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO chat_threads (id, collection_id, title, created_at, updated_at, rag_scope_json)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO chat_threads (id, collection_id, title, created_at, updated_at, rag_scope_json, owner_subject)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (tid, collection_id, default_title, ts, ts, rag_j),
+                (tid, collection_id, default_title, ts, ts, rag_j, owner_subject),
             )
             conn.commit()
         row = self.get_chat_thread(tid)
@@ -418,7 +482,7 @@ class MetadataDB:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
+                SELECT id, collection_id, title, created_at, updated_at, rag_scope_json, owner_subject
                 FROM chat_threads WHERE id = ?
                 """,
                 (thread_id,),
@@ -442,38 +506,44 @@ class MetadataDB:
         limit: int = 500,
         *,
         legacy_single_only: bool = False,
+        enforce_owner_subject: str | None = None,
     ) -> list[dict[str, Any]]:
         lim = max(1, min(limit, 1000))
+        sub_filter = ""
+        subs: list[Any] = []
+        if enforce_owner_subject is not None:
+            sub_filter = " AND owner_subject = ? "
+            subs.append(enforce_owner_subject)
         with self._connect() as conn:
             if collection_id and legacy_single_only:
-                rows = conn.execute(
-                    """
-                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
+                q = f"""
+                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json, owner_subject
                     FROM chat_threads
                     WHERE collection_id = ?
                       AND (rag_scope_json IS NULL OR rag_scope_json = '')
+                      {sub_filter}
                     ORDER BY updated_at DESC LIMIT ?
-                    """,
-                    (collection_id, lim),
-                ).fetchall()
+                    """
+                params: list[Any] = [collection_id, *subs, lim]
+                rows = conn.execute(q, tuple(params)).fetchall()
             elif collection_id:
-                rows = conn.execute(
-                    """
-                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
+                q = f"""
+                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json, owner_subject
                     FROM chat_threads WHERE collection_id = ?
+                    {sub_filter}
                     ORDER BY updated_at DESC LIMIT ?
-                    """,
-                    (collection_id, lim),
-                ).fetchall()
-            else:
-                rows = conn.execute(
                     """
-                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json
+                params = [collection_id, *subs, lim]
+                rows = conn.execute(q, tuple(params)).fetchall()
+            else:
+                q = f"""
+                    SELECT id, collection_id, title, created_at, updated_at, rag_scope_json, owner_subject
                     FROM chat_threads
+                    WHERE 1=1 {sub_filter}
                     ORDER BY updated_at DESC LIMIT ?
-                    """,
-                    (lim,),
-                ).fetchall()
+                    """
+                params = [*subs, lim]
+                rows = conn.execute(q, tuple(params)).fetchall()
         out: list[dict[str, Any]] = []
         for r in rows:
             d = dict(r)

@@ -185,6 +185,17 @@ def resolve_principal(
     raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
+def should_filter_chat_by_owner(principal: Principal) -> bool:
+    """Registry-пользователи видят только свои треды; env / API keys / dev — без фильтра."""
+    if principal.kind == "dev":
+        return False
+    if principal.kind == "api_key":
+        return False
+    if principal.kind == "session" and principal.subject in ("env_admin", "env_demo"):
+        return False
+    return True
+
+
 def get_principal(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
@@ -218,6 +229,25 @@ def require_app_admin(principal: Annotated[Principal, Depends(get_principal)]) -
 def forbid_demo_writes(principal: Annotated[Principal, Depends(get_principal)]) -> None:
     if principal.site_role == "demo":
         raise HTTPException(status_code=403, detail="Not allowed for demo role")
+
+
+def display_login_for_principal(p: Principal, registry: RegistryDB) -> str | None:
+    """Человекочитаемая подпись для UI (/auth/me); `subject` в Principal не меняем."""
+    sid = p.subject
+    if sid == "env_admin":
+        return "admin"
+    if sid == "env_demo":
+        return "demo"
+    if sid == "api_admin" or sid == "api_legacy":
+        return "admin"
+    if sid == "api_member":
+        return "member"
+    if sid == "dev":
+        return None
+    ru = registry.get_by_id(sid)
+    if ru is not None:
+        return ru.username
+    return None
 
 
 def is_user_panel_admin(p: Principal) -> bool:

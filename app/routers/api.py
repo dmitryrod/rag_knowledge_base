@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import traceback
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -20,9 +21,22 @@ from fastapi import (
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.auth_dep import forbid_demo_writes, get_auth, is_auth_configured, require_admin
+from app.auth_dep import (
+    Principal,
+    forbid_demo_writes,
+    get_auth,
+    get_principal,
+    is_auth_configured,
+    require_admin,
+    should_filter_chat_by_owner,
+)
 from app.chat_service import run_chat
 from app.rag_runtime import main_chat_effective_settings
+from app.rag_mount import (
+    collection_labels_for_chroma_targets,
+    expand_local_collection_ids_to_chroma_targets,
+    list_documents_maybe_mount,
+)
 from app.rag_scope import (
     RAG_ALL_PLACEHOLDER_ID,
     collection_ids_for_retrieval,
@@ -47,11 +61,26 @@ _log = logging.getLogger(__name__)
 
 
 class CollectionCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=256)
+    name: str = Field(default="", max_length=256)
     parent_id: str | None = Field(
         default=None,
         description="Родительский раздел; null или отсутствие — корень",
     )
+    mount_share_token: str | None = Field(
+        default=None,
+        description="Секрет из POST /collections/{id}/share — создать монтирование источника у текущего tenant",
+    )
+
+    @model_validator(mode="after")
+    def validate_name_or_mount(self) -> "CollectionCreate":
+        mt = (self.mount_share_token or "").strip()
+        if mt:
+            if not (self.name or "").strip():
+                object.__setattr__(self, "name", "Общий доступ")
+            return self
+        if not (self.name or "").strip():
+            raise ValueError("name is required when mount_share_token is not set")
+        return self
 
 
 class CollectionPatch(BaseModel):
@@ -78,6 +107,8 @@ class CollectionOut(BaseModel):
     name: str
     created_at: str
     parent_id: str | None = None
+    mount_issuer_tenant_id: str | None = None
+    mount_issuer_root_collection_id: str | None = None
 
 
 class DocumentNode(BaseModel):
@@ -208,8 +239,32 @@ def _row_parent_id(r: dict[str, Any]) -> str | None:
     return str(p)
 
 
+def _collection_row_to_out(row: dict[str, Any]) -> CollectionOut:
+    return CollectionOut(
+        id=str(row["id"]),
+        name=str(row["name"]),
+        created_at=str(row["created_at"]),
+        parent_id=_row_parent_id(row),
+        mount_issuer_tenant_id=str(row["mount_issuer_tenant_id"])
+        if row.get("mount_issuer_tenant_id")
+        else None,
+        mount_issuer_root_collection_id=str(row["mount_issuer_root_collection_id"])
+        if row.get("mount_issuer_root_collection_id")
+        else None,
+    )
+
+
+def _forbid_mount_mutate(db: Any, collection_id: str) -> None:
+    if db.is_collection_mount(collection_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Mounted section is read-only; mutate documents at the source tenant",
+        )
+
+
 def _build_knowledge_tree() -> list[CollectionTreeNode]:
     db = deps.get_db()
+    settings = get_settings()
     rows = [
         r
         for r in db.list_collections()
@@ -219,9 +274,13 @@ def _build_knowledge_tree() -> list[CollectionTreeNode]:
 
     def make_node(cid: str) -> CollectionTreeNode:
         row = by_id[cid]
-        child_ids = db.list_child_collection_ids(cid)
-        children = [make_node(c) for c in child_ids]
-        raw_docs = db.list_documents(cid)
+        if db.is_collection_mount(cid):
+            child_ids: list[str] = []
+            raw_docs = list_documents_maybe_mount(settings, db, cid)
+        else:
+            child_ids = db.list_child_collection_ids(cid)
+            raw_docs = db.list_documents(cid)
+        children = [] if db.is_collection_mount(cid) else [make_node(c) for c in child_ids]
         doc_nodes: list[DocumentNode] = []
         for d in raw_docs:
             doc_nodes.append(
@@ -250,52 +309,58 @@ def _build_knowledge_tree() -> list[CollectionTreeNode]:
     return [make_node(r) for r in roots]
 
 
-def _retrieval_ids_and_labels(
+def _retrieval_chroma_targets_and_labels(
     thread_row: dict[str, Any],
-) -> tuple[list[str], dict[str, str]]:
-    """Какие Chroma-коллекции искать и подписи разделов для контекста."""
+) -> tuple[list[tuple[str, str]], dict[str, str]]:
+    """Пары tenant_id+collection для Chroma (с учётом монтирований) и подписи разделов."""
     db = deps.get_db()
+    settings = get_settings()
     rscope = thread_row.get("rag")
     if rscope is None and thread_row.get("rag_scope_json") is not None:
         rscope = parse_rag_scope_json(str(thread_row.get("rag_scope_json") or ""))
     all_meta = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
     all_cids = [str(r["id"]) for r in all_meta]
     sreal = set(all_cids)
-    names = {str(r["id"]): str(r["name"]) for r in all_meta}
     base_tids = collection_ids_for_retrieval(
         all_cids,
         collection_id=str(thread_row["collection_id"]),
         rag_scope=rscope,
     )
     if rscope and rscope.get("all") is True:
-        tids = base_tids
+        logical = base_tids
     else:
-        tids = expand_collection_ids_with_subtrees(
+        logical = expand_collection_ids_with_subtrees(
             base_tids,
             subtree_postorder=db.collection_subtree_postorder,
             valid=sreal,
         )
-    labels = {k: names.get(k, k[:8] + "…") for k in tids}
-    return tids, labels
+    ltid = current_tenant_id.get()
+    chroma_targets = expand_local_collection_ids_to_chroma_targets(
+        settings, ltid, db, logical
+    )
+    labs = collection_labels_for_chroma_targets(settings, chroma_targets)
+    return chroma_targets, labs
 
 
 def _legacy_chat_collection_ids_and_labels(
     collection_id: str,
-) -> tuple[list[str], dict[str, str]]:
-    """POST /collections/{id}/chat: искать в разделе и во всех вложенных (как в UI-дереве)."""
+) -> tuple[list[tuple[str, str]], dict[str, str]]:
+    """POST /collections/{id}/chat: Chroma-цели по разделу и вложенным (монтирования включены)."""
+    settings = get_settings()
     db = deps.get_db()
     all_meta = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
     all_cids = [str(r["id"]) for r in all_meta]
     sreal = set(all_cids)
-    names = {str(r["id"]): str(r["name"]) for r in all_meta}
     base = [collection_id] if collection_id in sreal else []
-    tids = expand_collection_ids_with_subtrees(
+    logical = expand_collection_ids_with_subtrees(
         base,
         subtree_postorder=db.collection_subtree_postorder,
         valid=sreal,
     )
-    labels = {k: names.get(k, k[:8] + "…") for k in tids}
-    return tids, labels
+    ltid = current_tenant_id.get()
+    targets = expand_local_collection_ids_to_chroma_targets(settings, ltid, db, logical)
+    labs = collection_labels_for_chroma_targets(settings, targets)
+    return targets, labs
 
 
 @public.get("/health")
@@ -309,12 +374,64 @@ def health(settings: Settings = Depends(get_settings)) -> dict[str, str | bool]:
     }
 
 
+@router.post("/collections/{collection_id}/share", dependencies=[Depends(require_admin), Depends(forbid_demo_writes)])
+def mint_collection_share(
+    collection_id: str,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    """Одноразовый секрет для монтирования дерева раздела в другом tenant (см. POST /collections с mount_share_token)."""
+    if collection_id == RAG_ALL_PLACEHOLDER_ID:
+        raise HTTPException(status_code=400, detail="Reserved system collection")
+    db = deps.get_db()
+    row = db.get_collection(collection_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    if db.is_collection_mount(collection_id):
+        raise HTTPException(status_code=400, detail="Cannot share a mounted section")
+    token = secrets.token_urlsafe(48)
+    issuer_tenant = current_tenant_id.get()
+    deps.get_registry().create_share_link(issuer_tenant, collection_id, token)
+    db.audit("collection.share", f"id={collection_id} issuer_tenant={issuer_tenant}")
+    return {"share_token": token}
+
+
 @router.post("/collections", response_model=CollectionOut, dependencies=[Depends(require_admin)])
 def create_collection(
     body: CollectionCreate,
     settings: Settings = Depends(get_settings),
 ) -> CollectionOut:
     db = deps.get_db()
+    share_raw = (body.mount_share_token or "").strip()
+    if share_raw:
+        link = deps.get_registry().resolve_share_token(share_raw)
+        if link is None:
+            raise HTTPException(status_code=400, detail="Invalid or revoked share_token")
+        if body.parent_id:
+            if body.parent_id == RAG_ALL_PLACEHOLDER_ID:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot create section under reserved system collection",
+                )
+            parent = db.get_collection(body.parent_id)
+            if not parent:
+                raise HTTPException(status_code=404, detail="Parent collection not found")
+        issuer_db = deps.get_db_for_tenant(settings, link.issuer_tenant_id)
+        if not issuer_db.get_collection(link.issuer_root_collection_id):
+            raise HTTPException(status_code=404, detail="Share source collection missing")
+        name = body.name.strip() if body.name.strip() else "Общий доступ"
+        cid = db.create_mount_collection(
+            name,
+            parent_id=body.parent_id,
+            mount_issuer_tenant_id=link.issuer_tenant_id,
+            mount_issuer_root_collection_id=link.issuer_root_collection_id,
+        )
+        db.audit(
+            "collection.create.mount",
+            f"id={cid} issuer_tenant={link.issuer_tenant_id} root={link.issuer_root_collection_id!r}",
+        )
+        row = db.get_collection(cid)
+        assert row
+        return _collection_row_to_out(row)
     if body.parent_id:
         if body.parent_id == RAG_ALL_PLACEHOLDER_ID:
             raise HTTPException(
@@ -331,27 +448,14 @@ def create_collection(
     )
     row = db.get_collection(cid)
     assert row
-    return CollectionOut(
-        id=str(row["id"]),
-        name=str(row["name"]),
-        created_at=str(row["created_at"]),
-        parent_id=_row_parent_id(row),
-    )
+    return _collection_row_to_out(row)
 
 
 @router.get("/collections", response_model=list[CollectionOut])
 def list_collections() -> list[CollectionOut]:
     db = deps.get_db()
     rows = [r for r in db.list_collections() if r["id"] != RAG_ALL_PLACEHOLDER_ID]
-    return [
-        CollectionOut(
-            id=str(r["id"]),
-            name=str(r["name"]),
-            created_at=str(r["created_at"]),
-            parent_id=_row_parent_id(r),
-        )
-        for r in rows
-    ]
+    return [_collection_row_to_out(r) for r in rows]
 
 
 @router.get("/collections/tree", response_model=list[CollectionTreeNode])
@@ -401,6 +505,13 @@ def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut
     row = db.get_collection(collection_id)
     if not row:
         raise HTTPException(status_code=404, detail="Collection not found")
+    if db.is_collection_mount(collection_id):
+        pdata = body.model_dump(exclude_unset=True)
+        if "parent_id" in pdata:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot reparent a mounted section; delete and recreate the mount.",
+            )
     data = body.model_dump(exclude_unset=True)
     new_name: str | None = None
     if "name" in data and data["name"] is not None:
@@ -430,12 +541,7 @@ def patch_collection(collection_id: str, body: CollectionPatch) -> CollectionOut
         db.update_collection(collection_id, name=new_name)
     out = db.get_collection(collection_id)
     assert out
-    return CollectionOut(
-        id=str(out["id"]),
-        name=str(out["name"]),
-        created_at=str(out["created_at"]),
-        parent_id=_row_parent_id(out),
-    )
+    return _collection_row_to_out(out)
 
 
 @router.delete("/collections/{collection_id}", dependencies=[Depends(require_admin)])
@@ -445,6 +551,10 @@ def delete_collection(collection_id: str, settings: Settings = Depends(get_setti
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
+    if db.is_collection_mount(collection_id):
+        db.delete_collection(collection_id)
+        db.audit("collection.delete.mount", f"id={collection_id}")
+        return {"status": "deleted", "id": collection_id}
     order = db.collection_subtree_postorder(collection_id)
     store = deps.get_chroma()
     for cid in order:
@@ -463,6 +573,7 @@ async def upload_document(
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
+    _forbid_mount_mutate(db, collection_id)
     raw = await file.read()
     max_b = settings.max_upload_mb * 1024 * 1024
     if len(raw) > max_b:
@@ -503,7 +614,7 @@ def list_documents(collection_id: str) -> list[dict]:
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
-    return db.list_documents(collection_id)
+    return list_documents_maybe_mount(get_settings(), db, collection_id)
 
 
 @router.delete(
@@ -514,6 +625,7 @@ def delete_document(collection_id: str, document_id: str) -> dict[str, str]:
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
+    _forbid_mount_mutate(db, collection_id)
     if not db.get_document(collection_id, document_id):
         raise HTTPException(status_code=404, detail="Document not found")
     deps.get_chroma().delete_by_document(collection_id, document_id)
@@ -532,6 +644,7 @@ def patch_document(
     db = deps.get_db()
     if not db.get_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
+    _forbid_mount_mutate(db, collection_id)
     if not db.get_document(collection_id, document_id):
         raise HTTPException(status_code=404, detail="Document not found")
     fn = body.filename.strip()
@@ -569,6 +682,8 @@ def move_document(
         raise HTTPException(status_code=404, detail="Source collection not found")
     if not db.get_collection(target_collection_id):
         raise HTTPException(status_code=404, detail="Target collection not found")
+    _forbid_mount_mutate(db, source)
+    _forbid_mount_mutate(db, target_collection_id)
     if not db.get_document(source, document_id):
         raise HTTPException(status_code=404, detail="Document not found in source")
     if source == target_collection_id:
@@ -673,12 +788,12 @@ def chat(
         _check_polza_allowlist(eff)
         if not db.get_collection(collection_id):
             raise HTTPException(status_code=404, detail="Collection not found")
-        cids, col_labels = _legacy_chat_collection_ids_and_labels(collection_id)
+        targets, col_labels = _legacy_chat_collection_ids_and_labels(collection_id)
         out = run_chat(
             eff,
-            deps.get_chroma(),
+            None,
             body.message,
-            collection_ids=cids,
+            chroma_targets=targets,
             collection_labels=col_labels,
             debug=client_debug,
             system_prompt_override=sys_prompt,
@@ -689,13 +804,13 @@ def chat(
                 "POST /chat: run_chat ok chunks_considered=%s demo_mode=%s retrieval_collections=%s",
                 out.get("chunks_considered"),
                 out.get("demo_mode"),
-                cids,
+                [c for _, c in targets],
             )
         try:
             db.audit(
                 "chat.query",
                 f"collection={collection_id} len={len(body.message)} chunks={out.get('chunks_considered')}"
-                + (f" retrieval_cids={cids!r}" if client_debug else ""),
+                + (f" retrieval_targets={targets!r}" if client_debug else ""),
             )
         except Exception:
             # Ответ RAG уже готов; audit — не best-effort для UX, но логируем (иначе 500 зря)
@@ -758,12 +873,12 @@ def chat_export(
         _check_polza_allowlist(eff)
         if not db.get_collection(collection_id):
             raise HTTPException(status_code=404, detail="Collection not found")
-        cids, col_labels = _legacy_chat_collection_ids_and_labels(collection_id)
+        targets, col_labels = _legacy_chat_collection_ids_and_labels(collection_id)
         out = run_chat(
             eff,
-            deps.get_chroma(),
+            None,
             body.message,
-            collection_ids=cids,
+            chroma_targets=targets,
             collection_labels=col_labels,
             system_prompt_override=sys_prompt,
             distance_threshold=dist_thr,
@@ -790,11 +905,15 @@ def chat_export(
     return PlainTextResponse(content=text, media_type=media)
 
 
-def _get_thread_or_404(thread_id: str) -> dict[str, str]:
+def _get_thread_or_404(thread_id: str, principal: Principal) -> dict[str, Any]:
     db = deps.get_db()
     row = db.get_chat_thread(thread_id)
     if not row:
         raise HTTPException(status_code=404, detail="Chat thread not found")
+    if should_filter_chat_by_owner(principal):
+        own = row.get("owner_subject")
+        if own != principal.subject:
+            raise HTTPException(status_code=404, detail="Chat thread not found")
     return row
 
 
@@ -808,8 +927,10 @@ def list_chat_threads(
         default=None,
         description='JSON области RAG, например {"all":true} или {"ids":["uuid1","uuid2"]}',
     ),
+    principal: Principal = Depends(get_principal),
 ) -> list[ChatThreadOut]:
     db = deps.get_db()
+    enforce_owner = principal.subject if should_filter_chat_by_owner(principal) else None
     if rag is not None and rag.strip():
         try:
             user_scope = json.loads(rag)
@@ -817,7 +938,12 @@ def list_chat_threads(
             raise HTTPException(status_code=400, detail="Invalid rag JSON") from e
         if not isinstance(user_scope, dict):
             raise HTTPException(status_code=400, detail="rag must be a JSON object")
-        rows = db.list_chat_threads(collection_id=None, limit=1000, legacy_single_only=False)
+        rows = db.list_chat_threads(
+            collection_id=None,
+            limit=1000,
+            legacy_single_only=False,
+            enforce_owner_subject=enforce_owner,
+        )
         matched = [
             r
             for r in rows
@@ -833,14 +959,17 @@ def list_chat_threads(
             collection_id=collection_id,
             limit=500,
             legacy_single_only=True,
+            enforce_owner_subject=enforce_owner,
         )
         return [_thread_to_out(r) for r in rows]
-    rows = db.list_chat_threads(limit=500)
+    rows = db.list_chat_threads(limit=500, enforce_owner_subject=enforce_owner)
     return [_thread_to_out(r) for r in rows]
 
 
 @router.post("/chat/threads", response_model=ChatThreadOut)
-def create_chat_thread(body: ChatThreadCreate) -> ChatThreadOut:
+def create_chat_thread(
+    body: ChatThreadCreate, principal: Principal = Depends(get_principal)
+) -> ChatThreadOut:
     db = deps.get_db()
     scope: dict[str, Any] | None = None
     anchor: str
@@ -870,14 +999,19 @@ def create_chat_thread(body: ChatThreadCreate) -> ChatThreadOut:
             raise HTTPException(status_code=404, detail="Collection not found")
         anchor = body.collection_id
         scope = None
-    row = db.create_chat_thread(anchor, body.title, rag_scope=scope)
+    row = db.create_chat_thread(
+        anchor, body.title, rag_scope=scope, owner_subject=principal.subject
+    )
     db.audit("chat.thread.create", f"id={row['id']} collection={row['collection_id']} rag={scope}")
     return _thread_to_out(row)
 
 
 @router.get("/chat/threads/{thread_id}/messages", response_model=list[ChatMessageOut])
-def list_chat_messages(thread_id: str) -> list[ChatMessageOut]:
-    _get_thread_or_404(thread_id)
+def list_chat_messages(
+    thread_id: str,
+    principal: Principal = Depends(get_principal),
+) -> list[ChatMessageOut]:
+    _get_thread_or_404(thread_id, principal)
     db = deps.get_db()
     rows = db.list_chat_messages(thread_id)
     return [
@@ -894,8 +1028,12 @@ def list_chat_messages(thread_id: str) -> list[ChatMessageOut]:
 
 
 @router.patch("/chat/threads/{thread_id}", response_model=ChatThreadOut)
-def patch_chat_thread(thread_id: str, body: ChatThreadPatch) -> ChatThreadOut:
-    _get_thread_or_404(thread_id)
+def patch_chat_thread(
+    thread_id: str,
+    body: ChatThreadPatch,
+    principal: Principal = Depends(get_principal),
+) -> ChatThreadOut:
+    _get_thread_or_404(thread_id, principal)
     db = deps.get_db()
     if not db.update_chat_thread_title(thread_id, body.title):
         raise HTTPException(status_code=400, detail="Invalid title")
@@ -906,8 +1044,11 @@ def patch_chat_thread(thread_id: str, body: ChatThreadPatch) -> ChatThreadOut:
 
 
 @router.delete("/chat/threads/{thread_id}")
-def delete_chat_thread(thread_id: str) -> dict[str, str]:
-    _get_thread_or_404(thread_id)
+def delete_chat_thread(
+    thread_id: str,
+    principal: Principal = Depends(get_principal),
+) -> dict[str, str]:
+    _get_thread_or_404(thread_id, principal)
     db = deps.get_db()
     db.delete_chat_thread(thread_id)
     db.audit("chat.thread.delete", f"id={thread_id}")
@@ -920,8 +1061,9 @@ def chat_in_thread(
     body: ChatIn,
     settings: Settings = Depends(get_settings),
     client_debug: bool = Depends(is_client_debug),
+    principal: Principal = Depends(get_principal),
 ) -> ChatOut:
-    thread = _get_thread_or_404(thread_id)
+    thread = _get_thread_or_404(thread_id, principal)
     if client_debug:
         _log.info(
             "POST /chat/threads/.../messages: thread=%s collection=%s len=%s",
@@ -933,8 +1075,8 @@ def chat_in_thread(
         db = deps.get_db()
         eff, sys_prompt, dist_thr = main_chat_effective_settings(settings, db)
         _check_polza_allowlist(eff)
-        cids, col_labels = _retrieval_ids_and_labels(thread)
-        if not cids:
+        targets, col_labels = _retrieval_chroma_targets_and_labels(thread)
+        if not targets:
             raise HTTPException(
                 status_code=400,
                 detail="No collections to search. Add sections/documents or create a new chat.",
@@ -942,9 +1084,9 @@ def chat_in_thread(
         db.insert_chat_message(thread_id, "user", body.message, citations=None)
         out = run_chat(
             eff,
-            deps.get_chroma(),
+            None,
             body.message,
-            collection_ids=cids,
+            chroma_targets=targets,
             collection_labels=col_labels,
             debug=client_debug,
             system_prompt_override=sys_prompt,
@@ -966,8 +1108,8 @@ def chat_in_thread(
         try:
             db.audit(
                 "chat.thread.message",
-                f"thread={thread_id} collections={cids!r} len={len(body.message)} chunks={out.get('chunks_considered')}"
-                + (f" retrieval_collection_count={len(cids)}" if client_debug else ""),
+                f"thread={thread_id} collections={targets!r} len={len(body.message)} chunks={out.get('chunks_considered')}"
+                + (f" retrieval_targets={len(targets)}" if client_debug else ""),
             )
         except Exception:
             _log.exception("POST thread message: audit failed; ответ отдаётся")

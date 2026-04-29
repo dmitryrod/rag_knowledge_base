@@ -7,7 +7,7 @@ import logging
 import re
 from typing import Any
 
-from app.chroma_store import ChromaStore
+from app.chroma_cross_tenant import query_multi_cross_tenant
 from app.config import Settings
 from app import llm as llm_mod
 from app.rag_filters import filter_chunks_by_distance
@@ -276,46 +276,74 @@ def build_context_block(
 
 def run_chat(
     settings: Settings,
-    store: ChromaStore,
+    store: ChromaStore | None,
     user_message: str,
     *,
-    collection_ids: list[str],
+    collection_ids: list[str] | None = None,
+    chroma_targets: list[tuple[str, str]] | None = None,
     collection_labels: dict[str, str] | None = None,
     debug: bool = False,
     system_prompt_override: str | None = None,
     distance_threshold: float | None = None,
 ) -> dict[str, Any]:
-    cids = [c for c in collection_ids if c]
-    if not cids:
-        return {
-            "answer": "НЕ НАЙДЕНО В БАЗЕ: не выбраны разделы для поиска.",
-            "citations": [],
-            "chunks_considered": 0,
-        }
+    use_cross = bool(chroma_targets)
+    if use_cross:
+        cids_dbg = [c for _, c in (chroma_targets or []) if c]
+    else:
+        cids_dbg = [c for c in (collection_ids or []) if c]
+
+    if not use_cross:
+        assert store is not None
+        if not collection_ids:
+            return {
+                "answer": "НЕ НАЙДЕНО В БАЗЕ: не выбраны разделы для поиска.",
+                "citations": [],
+                "chunks_considered": 0,
+            }
+        cids = [c for c in collection_ids if c]
+    else:
+        cids = cids_dbg
+        if not cids:
+            return {
+                "answer": "НЕ НАЙДЕНО В БАЗЕ: не выбраны разделы для поиска.",
+                "citations": [],
+                "chunks_considered": 0,
+            }
     if debug:
         _log.info(
-            "run_chat: start collection_ids=%s message_len=%s retrieval_top_k=%s polza_set=%s egress=%s",
-            cids,
+            "run_chat: start collection_ids=%s cross_tenant=%s message_len=%s retrieval_top_k=%s polza_set=%s egress=%s",
+            cids_dbg,
+            use_cross,
             len(user_message),
             settings.retrieval_top_k,
             bool(settings.polza_api_key),
             settings.allow_llm_egress,
         )
     try:
-        if len(cids) == 1:
+        if use_cross:
+            assert chroma_targets is not None
+            chunks = query_multi_cross_tenant(
+                settings,
+                chroma_targets,
+                user_message,
+                settings.retrieval_top_k,
+            )
+        elif len(cids) == 1:
+            assert store is not None
             chunks = store.query(
                 cids[0],
                 user_message,
                 n_results=settings.retrieval_top_k,
             )
         else:
+            assert store is not None
             chunks = store.query_multi(
                 cids,
                 user_message,
                 n_results=settings.retrieval_top_k,
             )
     except Exception:
-        _log.exception("run_chat: Chroma query failed collection_ids=%s", cids)
+        _log.exception("run_chat: Chroma query failed collection_ids=%s", cids_dbg)
         raise
     if debug:
         _log.info("run_chat: retrieved chunks count=%s", len(chunks))
@@ -327,7 +355,7 @@ def run_chat(
         }
         if debug:
             out_empty["debug"] = {
-                "collection_ids": cids,
+                "collection_ids": cids_dbg,
                 "retrieval_raw_count": 0,
                 "distance_filtered_out": 0,
                 "top_chunks": [],
@@ -345,7 +373,7 @@ def run_chat(
         }
         if debug:
             out_f["debug"] = _build_chat_debug_payload(
-                cids,
+                cids_dbg,
                 chunks_before_filter,
                 dropped_n,
                 preview_from=chunks_before_filter,
@@ -384,7 +412,7 @@ def run_chat(
         }
         if debug:
             demo_out["debug"] = _build_chat_debug_payload(
-                cids,
+                cids_dbg,
                 chunks_before_filter,
                 dropped_n,
                 preview_from=chunks,
@@ -440,7 +468,7 @@ def run_chat(
     }
     if debug:
         out["debug"] = _build_chat_debug_payload(
-            cids,
+            cids_dbg,
             chunks_before_filter,
             dropped_n,
             preview_from=chunks,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -22,6 +23,16 @@ class RegistryUser:
     tenant_id: str
     site_role: str
     created_at: str
+
+
+@dataclass(frozen=True)
+class ShareLink:
+    issuer_tenant_id: str
+    issuer_root_collection_id: str
+
+
+def _sha256_hex(text: str) -> str:
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
 
 
 class RegistryDB:
@@ -52,8 +63,62 @@ class RegistryDB:
                     site_role TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 )
-                """
+            """
             )
+            self._ensure_share_links_schema(conn)
+
+    def _ensure_share_links_schema(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS share_links (
+                id TEXT PRIMARY KEY,
+                issuer_tenant_id TEXT NOT NULL,
+                issuer_root_collection_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+
+    def create_share_link(
+        self,
+        issuer_tenant_id: str,
+        issuer_root_collection_id: str,
+        plaintext_token: str,
+    ) -> str:
+        sid = str(uuid4())
+        ts = utc_now_iso()
+        digest = _sha256_hex(plaintext_token)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO share_links (
+                    id, issuer_tenant_id, issuer_root_collection_id, token_hash, created_at, revoked
+                )
+                VALUES (?, ?, ?, ?, ?, 0)
+                """,
+                (sid, issuer_tenant_id, issuer_root_collection_id, digest, ts),
+            )
+        return sid
+
+    def resolve_share_token(self, plaintext_token: str) -> ShareLink | None:
+        """По секретной строке (показывается один раз при создании) — tenant и корень дерева источника."""
+        digest = _sha256_hex(plaintext_token)
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT issuer_tenant_id, issuer_root_collection_id
+                FROM share_links WHERE token_hash = ? AND revoked = 0
+                """,
+                (digest,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ShareLink(
+            issuer_tenant_id=str(row[0]),
+            issuer_root_collection_id=str(row[1]),
+        )
 
     def create_user(
         self,
@@ -81,6 +146,23 @@ class RegistryDB:
             row = conn.execute(
                 "SELECT id, username, tenant_id, site_role, created_at FROM users WHERE username = ?",
                 (username,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RegistryUser(
+            id=row["id"],
+            username=row["username"],
+            tenant_id=row["tenant_id"],
+            site_role=row["site_role"],
+            created_at=row["created_at"],
+        )
+
+    def get_by_id(self, user_id: str) -> RegistryUser | None:
+        """По id строки пользователя (совпадает с Principal.subject при входе из registry)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, username, tenant_id, site_role, created_at FROM users WHERE id = ?",
+                (user_id,),
             ).fetchone()
         if row is None:
             return None

@@ -49,7 +49,32 @@ def test_auth_login_me_flow(client_session: TestClient) -> None:
     body = m.json()
     assert body["tenant_id"] == "env_admin"
     assert body["site_role"] == "admin"
+    assert body["subject"] == "env_admin"
+    assert body["display_login"] == "admin"
     assert body["can_manage_users"] is True
+
+
+def test_registry_user_me_display_login(client_session: TestClient) -> None:
+    """Созданный admin пользователь: /me даёт display_login=username, свой tenant."""
+    assert client_session.post(
+        "/v1/auth/login",
+        json={"username": "admin", "password": "adminpass"},
+    ).status_code == 200
+    u = "member_test_user"
+    created = client_session.post(
+        "/v1/admin/users",
+        json={"username": u, "password": "secret123", "site_role": "member"},
+    )
+    assert created.status_code == 201, created.text
+    tenant = created.json()["tenant_id"]
+    assert client_session.post("/v1/auth/logout", json={}).status_code == 200
+    lg = client_session.post("/v1/auth/login", json={"username": u, "password": "secret123"})
+    assert lg.status_code == 200, lg.text
+    me = client_session.get("/v1/auth/me").json()
+    assert me["tenant_id"] == tenant
+    assert me["display_login"] == u
+    assert me["subject"] != u
+    assert len(me["subject"]) == 36
 
 
 def test_tenant_data_paths_after_init(client_session: TestClient) -> None:

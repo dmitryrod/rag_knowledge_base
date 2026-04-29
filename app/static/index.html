@@ -1832,11 +1832,12 @@
             <div class="card hidden" id="userAdminCard">
               <h2>Пользователи</h2>
               <p style="font-size:0.875rem;color:var(--on-surface-variant);margin:0 0 0.5rem 0">
-                Новый пользователь получает своё изолированное хранилище данных.
+                Новый пользователь по умолчанию получает своё хранилище. Опционально укажите UUID существующего tenant — общая база документов, чаты остаются персональными.
               </p>
               <div class="row" style="flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;align-items:flex-end">
                 <div style="flex:1;min-width:140px"><label class="field" for="newUserLogin">Логин</label><input type="text" id="newUserLogin" autocomplete="off" /></div>
                 <div style="flex:1;min-width:140px"><label class="field" for="newUserPass">Пароль</label><input type="password" id="newUserPass" autocomplete="new-password" /></div>
+                <div style="flex:1;min-width:200px"><label class="field" for="newUserWorkspaceTenant">Workspace tenant UUID (опционально)</label><input type="text" id="newUserWorkspaceTenant" placeholder="общий tenants/…" autocomplete="off" /></div>
                 <button type="button" class="btn" id="btnCreateUser">Создать</button>
               </div>
               <p id="userAdminErr" class="status err hidden"></p>
@@ -2142,6 +2143,8 @@
     const ragScopeStore = "knowledge_rag_scope";
     const threadStore = "knowledge_active_thread_id";
     const sidebarWidthStore = "knowledge_sidebar_width";
+    /** Последний (tenant\\tsubject) для детекта смены аккаунта и сброса кэша в localStorage. */
+    const authFpLastKey = "knowledge_last_auth_fp";
     let selectedCid = null;
     let ragScope = { all: true, ids: [] };
     let activeThreadId = null;
@@ -3448,6 +3451,22 @@
       return s !== "api_admin" && s !== "api_member" && s !== "api_legacy";
     }
 
+    /** Человекочитаемая подпись в UI: env_admin / env_demo → admin / demo (остальные subject без изменений). */
+    function displaySubjectForUi(subject) {
+      const s = subject == null ? "" : String(subject).trim();
+      if (s === "env_admin") return "admin";
+      if (s === "env_demo") return "demo";
+      return s;
+    }
+
+    /** Человекочитаемое имя в топбаре: приоритет display_login из /v1/auth/me, затем env_* маска. */
+    function sessionDisplayLogin(me) {
+      if (!me) return "";
+      const d = me.display_login;
+      if (d != null && String(d).trim() !== "") return String(d).trim();
+      return displaySubjectForUi(me.subject);
+    }
+
     function updateTopbarSession() {
       const wrap = $("topbarSession");
       const label = $("topbarSessionUser");
@@ -3455,9 +3474,10 @@
       const me = window.__AUTH_ME;
       if (isBrowserSessionPrincipal(me)) {
         wrap.classList.remove("hidden");
-        label.textContent = me.subject;
-        label.setAttribute("title", "Вошли как: " + me.subject);
-        wrap.setAttribute("aria-label", "Текущий пользователь: " + String(me.subject));
+        const shown = sessionDisplayLogin(me);
+        label.textContent = shown;
+        label.setAttribute("title", "Вошли как: " + shown);
+        wrap.setAttribute("aria-label", "Текущий пользователь: " + shown);
       } else {
         wrap.classList.add("hidden");
         label.textContent = "";
@@ -3566,6 +3586,7 @@
           const t = await r.text();
           if (!r.ok) throw new Error(t);
           $("loginPass").value = "";
+          clearHeadStatus();
           await loadHealth();
         } catch (e) {
           if (err) { err.textContent = String(e); err.classList.remove("hidden"); }
@@ -3602,15 +3623,19 @@
           return;
         }
         try {
+          const payload = { username: u, password: p, site_role: "member" };
+          const wtv = $("newUserWorkspaceTenant") && $("newUserWorkspaceTenant").value.trim();
+          if (wtv) payload.workspace_tenant_id = wtv;
           const r = await fetchWithCred(apiPath("/v1/admin/users"), {
             method: "POST",
             headers: headers(true),
-            body: JSON.stringify({ username: u, password: p, site_role: "member" }),
+            body: JSON.stringify(payload),
           });
           const t = await r.text();
           if (!r.ok) throw new Error(t);
           $("newUserPass").value = "";
           $("newUserLogin").value = "";
+          if ($("newUserWorkspaceTenant")) $("newUserWorkspaceTenant").value = "";
           await loadUsersAdmin();
           showHead("Пользователь создан.", true);
         } catch (e) {
@@ -4754,6 +4779,52 @@
       }
     }
 
+    function clearHeadStatus() {
+      const n = $("headStatus");
+      if (!n) return;
+      n.textContent = "";
+      n.className = "status head-status";
+    }
+
+    /** Убрать останавлившее сообщение после выхода, когда уже есть активная сессия. */
+    function clearStaleLogoutBannerFromHead() {
+      const n = $("headStatus");
+      if (!n || !window.__AUTH_ME) return;
+      const t = String(n.textContent || "").toLowerCase();
+      if (t.indexOf("вышли") >= 0) clearHeadStatus();
+    }
+
+    async function syncAuthFingerprintAndReloadCollectionsIfTenantChanged() {
+      const me = window.__AUTH_ME;
+      const fp = me ? String(me.tenant_id || "") + "\t" + String(me.subject || "") : "";
+      const stored = localStorage.getItem(authFpLastKey);
+      if (!me) {
+        return;
+      }
+      if (stored && stored !== fp) {
+        try {
+          localStorage.removeItem(threadStore);
+          localStorage.removeItem(ragScopeStore);
+          localStorage.removeItem(cidStore);
+          localStorage.removeItem(knowledgeSelStore);
+          localStorage.removeItem(testScopeStore);
+          localStorage.removeItem(testFavoriteStore);
+          localStorage.removeItem("knowledge_tree_collapsed");
+        } catch (err) {
+          /* ignore */
+        }
+        activeThreadId = null;
+        ragScope = { all: true, ids: [] };
+        selectedCid = null;
+        knowledgeSelection = null;
+        chatMessagesSnapshot = [];
+        kbDocMultiMap.clear();
+        treeCollapsedIds = new Set();
+        await loadCollections();
+      }
+      localStorage.setItem(authFpLastKey, fp);
+    }
+
     async function loadHealth() {
       try {
         const r = await fetchWithCred(apiPath("/v1/health"));
@@ -4768,6 +4839,8 @@
           const mr = await fetchWithCred(apiPath("/v1/auth/me"), { headers: headers(false) });
           if (mr.ok) window.__AUTH_ME = await mr.json();
         } catch (_) { window.__AUTH_ME = null; }
+        await syncAuthFingerprintAndReloadCollectionsIfTenantChanged();
+        clearStaleLogoutBannerFromHead();
         applyLoginGate();
         applyDemoRestrictions();
         loadUsersAdmin();
@@ -5290,7 +5363,7 @@
       try {
         const o = getRagScopeObject();
         const ragParam = o.all ? JSON.stringify({ all: true }) : JSON.stringify({ ids: o.ids });
-        const r = await fetch(
+        const r = await fetchWithCred(
           apiPath("/v1/chat/threads?rag=" + encodeURIComponent(ragParam)),
           { headers: headers(false) }
         );
@@ -5496,11 +5569,12 @@
       });
     })();
 
+    (async function bootstrap() {
     setView("chat");
-    loadHealth();
+    await loadHealth();
     initKbTreeDnD();
     initKbTreeLabelTitles();
-    loadCollections();
+    await loadCollections();
     loadTestProfiles();
     loadMainChatProfileUi();
     (function initTestCommonQAutosize() {
@@ -5508,6 +5582,7 @@
       if (!el) return;
       el.addEventListener("input", autosizeTestQuestion);
       autosizeTestQuestion();
+    })();
     })();
   </script>
 </body>

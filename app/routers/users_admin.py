@@ -13,6 +13,7 @@ from app.auth_dep import require_users_panel
 from app.config import Settings, get_settings
 from app.deps import get_registry, provision_tenant
 from app.passwords import hash_password
+from app.tenancy import tenant_dir
 
 router = APIRouter(
     prefix="/admin/users",
@@ -25,6 +26,10 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=256)
     password: str = Field(..., min_length=1, max_length=512)
     site_role: str = Field(default="member", description="member или admin")
+    workspace_tenant_id: str | None = Field(
+        default=None,
+        description="Привязать к существующему tenant (общая KB для нескольких логинов).",
+    )
 
 
 class UserOut(BaseModel):
@@ -55,8 +60,18 @@ def list_users() -> list[UserOut]:
 def create_user(body: UserCreate, settings: Settings = Depends(get_settings)) -> UserOut:
     if body.site_role not in ("member", "admin"):
         raise HTTPException(status_code=400, detail="site_role must be member or admin")
-    tenant_id = str(uuid4())
-    provision_tenant(settings, tenant_id)
+    wt = (body.workspace_tenant_id or "").strip()
+    if wt:
+        tenant_id = wt
+        meta_path = tenant_dir(settings.data_dir, tenant_id) / "metadata.db"
+        if not meta_path.is_file():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tenant data not found at {meta_path}",
+            )
+    else:
+        tenant_id = str(uuid4())
+        provision_tenant(settings, tenant_id)
     try:
         u = get_registry().create_user(
             body.username.strip(),
