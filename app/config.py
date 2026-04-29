@@ -1,16 +1,27 @@
 """Runtime configuration from environment."""
 
+from __future__ import annotations
+
+import os
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _settings_env_files() -> tuple[str, ...]:
+    """По умолчанию загружаются `.env`, `app/.env`; в pytest задаётся KNOWLEDGE_TESTS_NO_DOTENV=1 без reload."""
+    v = os.getenv("KNOWLEDGE_TESTS_NO_DOTENV", "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return ()
+    return (".env", "app/.env")
+
+
 class Settings(BaseSettings):
     """Application settings; loads from `.env` in cwd or `app/.env`."""
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "app/.env"),
+        env_file=_settings_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -67,6 +78,16 @@ class Settings(BaseSettings):
     # CORS: через запятую (http://a:3000) или * — иначе «Failed to fetch» при веб-UI не с того origin.
     app_cors_origins: str = Field(default="*", validation_alias=AliasChoices("APP_CORS_ORIGINS"))
 
+    # Сессионный вход (браузер). Подпись cookie для Starlette SessionMiddleware.
+    session_secret: str | None = Field(default=None, validation_alias=AliasChoices("SESSION_SECRET", "APP_SESSION_SECRET"))
+    # Учётка admin из env (полный доступ). Пароль сравнивается через secrets.compare_digest.
+    admin_login: str | None = Field(default=None, validation_alias=AliasChoices("ADMIN_LOGIN", "APP_ADMIN_LOGIN"))
+    admin_password: str | None = Field(default=None, validation_alias=AliasChoices("ADMIN_PASSWORD", "APP_ADMIN_PASSWORD"))
+    # DEMO: только при demo_enabled=true и заданных логине/пароле.
+    demo_enabled: bool = Field(default=False, validation_alias=AliasChoices("DEMO_ENABLED", "APP_DEMO_ENABLED"))
+    demo_login: str | None = Field(default=None, validation_alias=AliasChoices("DEMO_LOGIN", "APP_DEMO_LOGIN"))
+    demo_password: str | None = Field(default=None, validation_alias=AliasChoices("DEMO_PASSWORD", "APP_DEMO_PASSWORD"))
+
 
 def get_settings() -> Settings:
     return Settings()
@@ -78,6 +99,22 @@ def polza_allowlist_ids(settings: Settings) -> set[str]:
     if not raw or not raw.strip():
         return set()
     return {x.strip() for x in raw.split(",") if x.strip()}
+
+
+def is_session_login_configured(settings: Settings) -> bool:
+    """True, если заданы секрет сессии и пара admin login/password для POST /v1/auth/login."""
+    sec = (settings.session_secret or "").strip()
+    al = (settings.admin_login or "").strip()
+    ap = settings.admin_password
+    return bool(sec and al and ap is not None and str(ap) != "")
+
+
+def is_auth_required(settings: Settings) -> bool:
+    """Ключи API и/или сессионный вход — иначе dev-режим без проверки."""
+    keys = bool(
+        settings.app_api_key or settings.app_admin_key or settings.app_member_key
+    )
+    return keys or is_session_login_configured(settings)
 
 
 def is_polza_model_allowlisted(settings: Settings) -> bool:

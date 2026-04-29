@@ -20,7 +20,7 @@ from fastapi import (
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.auth_dep import get_auth, is_auth_configured, require_admin
+from app.auth_dep import forbid_demo_writes, get_auth, is_auth_configured, require_admin
 from app.chat_service import run_chat
 from app.rag_runtime import main_chat_effective_settings
 from app.rag_scope import (
@@ -31,13 +31,17 @@ from app.rag_scope import (
     parse_rag_scope_json,
     thread_matches_rag,
 )
-from app.config import Settings, get_settings, is_polza_model_allowlisted
+from app.config import Settings, get_settings, is_polza_model_allowlisted, is_session_login_configured
 from app.debug_dep import is_client_debug
-from app import deps
 from app.ingest import chunk_text, extract_text
 from app.llm import LlmUpstreamError
+from app.request_tenant import current_tenant_id
+from app.tenancy import tenant_dir
+from app import deps
 
-router = APIRouter(dependencies=[Depends(get_auth)])
+from app.router_tenant_bind import bind_tenant_context
+
+router = APIRouter(dependencies=[Depends(bind_tenant_context), Depends(get_auth)])
 public = APIRouter()
 _log = logging.getLogger(__name__)
 
@@ -298,9 +302,10 @@ def _legacy_chat_collection_ids_and_labels(
 def health(settings: Settings = Depends(get_settings)) -> dict[str, str | bool]:
     return {
         "status": "ok",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "data_dir": str(settings.data_dir),
         "auth_configured": is_auth_configured(settings),
+        "session_login_configured": is_session_login_configured(settings),
     }
 
 
@@ -365,9 +370,10 @@ def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStat
     ]
     doc_agg = db.documents_aggregate()
     chunks = store.total_embeddings_for_collection_ids(user_ids)
-    data_dir = Path(settings.data_dir)
-    meta_path = data_dir / "metadata.db"
-    chroma_dir = data_dir / "chroma"
+    tid = current_tenant_id.get()
+    td = tenant_dir(settings.data_dir, tid)
+    meta_path = td / "metadata.db"
+    chroma_dir = td / "chroma"
     return KnowledgeStatsOut(
         sections_count=db.count_user_sections(),
         documents_count=doc_agg["count"],
@@ -376,7 +382,7 @@ def knowledge_stats(settings: Settings = Depends(get_settings)) -> KnowledgeStat
         document_files_size_bytes=doc_agg["size_bytes_sum"],
         metadata_db_size_bytes=_safe_file_size(meta_path),
         chroma_storage_size_bytes=_dir_size_bytes(chroma_dir),
-        data_dir_size_bytes=_dir_size_bytes(data_dir),
+        data_dir_size_bytes=_dir_size_bytes(td),
         chat_threads_count=db.chat_threads_count(),
         chat_messages_count=db.chat_messages_count(),
         audit_log_rows=db.audit_log_rows_count(),
@@ -730,7 +736,11 @@ def _format_export(answer: str, citations: list[dict], fmt: str) -> str:
     return "\n".join(md_lines).strip() + "\n"
 
 
-@router.post("/collections/{collection_id}/chat/export", response_class=PlainTextResponse)
+@router.post(
+    "/collections/{collection_id}/chat/export",
+    response_class=PlainTextResponse,
+    dependencies=[Depends(forbid_demo_writes)],
+)
 def chat_export(
     collection_id: str,
     body: ChatIn,

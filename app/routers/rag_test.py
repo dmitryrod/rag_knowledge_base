@@ -26,7 +26,9 @@ from app.rag_test_service import run_rag_test
 
 _log = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(get_auth)])
+from app.router_tenant_bind import bind_tenant_context
+
+router = APIRouter(dependencies=[Depends(bind_tenant_context), Depends(get_auth)])
 
 
 # --- Pydantic I/O ---
@@ -158,7 +160,11 @@ def _serialize_chunks_for_db(chunks: list[dict[str, Any]], max_text: int = 2000)
 
 
 def _favorites_dir(settings: Settings) -> Path:
-    d = Path(settings.data_dir) / "tests_favorite"
+    from app.request_tenant import current_tenant_id
+    from app.tenancy import tenant_dir
+
+    td = tenant_dir(settings.data_dir, current_tenant_id.get())
+    d = td / "tests_favorite"
     d.mkdir(parents=True, exist_ok=True)
     return d.resolve()
 

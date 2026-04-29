@@ -235,7 +235,7 @@ def test_main_chat_profile_reset_after_apply(client: TestClient) -> None:
 
 def test_rag_test_favorite_crud_json_files(client: TestClient, tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
-    fav_dir = data_dir / "tests_favorite"
+    fav_dir = data_dir / "tenants" / "env_admin" / "tests_favorite"
     body = {
         "question": "hello favorite",
         "scope_ui": {"kind": "all", "sectionIds": [], "docs": {}},
@@ -283,7 +283,7 @@ def test_rag_test_favorite_rejects_bad_id(client: TestClient) -> None:
 
 def test_rag_test_favorite_list_skips_corrupt_file(client: TestClient, tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
-    fav_dir = data_dir / "tests_favorite"
+    fav_dir = data_dir / "tenants" / "env_admin" / "tests_favorite"
     fav_dir.mkdir(parents=True, exist_ok=True)
     (fav_dir / "T000099.json").write_text("not json {{{", encoding="utf-8")
     r = client.get("/v1/rag-test/favorites")

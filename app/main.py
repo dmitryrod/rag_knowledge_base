@@ -12,11 +12,14 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.deps import init_stores
 from app.routers.api import public, router
+from app.routers.auth_api import router as auth_api_router
 from app.routers.rag_test import router as rag_test_router
+from app.routers.users_admin import router as users_admin_router
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -87,8 +90,21 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Knowledge workspace",
-        version="0.4.0",
+        version="0.5.0",
         lifespan=lifespan,
+    )
+    settings = get_settings()
+
+    sess = (settings.session_secret or "").strip()
+    secret_key = sess if sess else "dev-insecure-session-change-in-production"
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=secret_key,
+        session_cookie="knowledge_session",
+        same_site="lax",
+        https_only=False,
+        max_age=1209600,
     )
 
     @app.get("/", include_in_schema=False)
@@ -97,12 +113,16 @@ def create_app() -> FastAPI:
         return HTMLResponse(content=_inject_index_html(), status_code=200)
 
     app.include_router(public, prefix="/v1", tags=["health"])
+    app.include_router(auth_api_router, prefix="/v1", tags=["auth"])
+    app.include_router(users_admin_router, prefix="/v1", tags=["admin-users"])
     app.include_router(router, prefix="/v1", tags=["api"])
     app.include_router(rag_test_router, prefix="/v1", tags=["rag-test"])
 
+    ao = _cors_allow_origins()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=_cors_allow_origins(),
+        allow_origins=ao,
+        allow_credentials=(ao != ["*"]),
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],

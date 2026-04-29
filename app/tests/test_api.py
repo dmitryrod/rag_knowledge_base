@@ -85,8 +85,9 @@ def test_root_serves_admin_ui(client: TestClient) -> None:
     assert "function autosizeTestQuestion" in r.text
     assert "initTestCommonQAutosize" in r.text
     assert "function autosizeChatInput" in r.text
-    assert "initChatComposerAutosize" in r.text
     assert "scrollHeight" in r.text
+    assert 'id="btnLogout"' in r.text
+    assert 'id="topbarSession"' in r.text
 
 
 def test_cors_allows_preflight_for_health(client: TestClient) -> None:
@@ -109,7 +110,7 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["version"] == "0.4.0"
+    assert body["version"] == "0.5.0"
     assert "auth_configured" in body
     assert body["auth_configured"] is False
 

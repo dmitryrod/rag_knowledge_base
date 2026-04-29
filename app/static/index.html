@@ -553,6 +553,29 @@
       right: 0.75rem;
       top: 50%;
       transform: translateY(-50%);
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .topbar-session {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-width: 0;
+      max-width: min(52vw, 18rem);
+    }
+    .topbar-session.hidden {
+      display: none !important;
+    }
+    .topbar-session-user {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--on-surface-variant);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
     .btn-gear {
       width: 44px;
@@ -1627,6 +1650,17 @@
   </script>
 </head>
 <body>
+  <div id="loginGate" class="login-gate hidden" style="position:fixed;inset:0;z-index:9999;background:var(--surface,#0e0e0e);display:flex;align-items:center;justify-content:center;padding:1.5rem">
+    <div class="card" style="max-width:22rem;width:100%">
+      <h2 style="margin-top:0">Вход</h2>
+      <label class="field" for="loginUser">Логин</label>
+      <input type="text" id="loginUser" autocomplete="username" style="width:100%;margin-bottom:0.75rem" />
+      <label class="field" for="loginPass">Пароль</label>
+      <input type="password" id="loginPass" autocomplete="current-password" style="width:100%;margin-bottom:0.75rem" />
+      <p id="loginErr" class="status err hidden" style="margin:0 0 0.5rem 0"></p>
+      <button type="button" class="btn" id="btnLoginSubmit" style="width:100%">Войти</button>
+    </div>
+  </div>
   <div class="app">
     <aside class="sidebar" id="sidebar" aria-label="Боковая панель">
       <div class="sidebar-head">Knowledge</div>
@@ -1667,6 +1701,10 @@
           <button type="button" class="tab" data-view="tests" id="tabTests" role="tab" aria-selected="false">Тесты</button>
         </div>
         <div class="topbar-settings">
+          <div class="topbar-session hidden" id="topbarSession" aria-live="polite">
+            <span class="topbar-session-user mono" id="topbarSessionUser" title=""></span>
+            <button type="button" class="btn secondary" id="btnLogout" title="Выход из сессии браузера" aria-label="Выйти из сессии" style="padding: 0.4rem 0.85rem; min-height: 44px; font-size: 0.8125rem;">Выйти</button>
+          </div>
           <button type="button" class="btn-gear" id="btnSettings" title="Настройки" aria-label="Настройки">⚙</button>
         </div>
       </header>
@@ -1790,6 +1828,19 @@
             <div class="card">
               <h2>Health</h2>
               <p class="status mono" id="healthOut">—</p>
+            </div>
+            <div class="card hidden" id="userAdminCard">
+              <h2>Пользователи</h2>
+              <p style="font-size:0.875rem;color:var(--on-surface-variant);margin:0 0 0.5rem 0">
+                Новый пользователь получает своё изолированное хранилище данных.
+              </p>
+              <div class="row" style="flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;align-items:flex-end">
+                <div style="flex:1;min-width:140px"><label class="field" for="newUserLogin">Логин</label><input type="text" id="newUserLogin" autocomplete="off" /></div>
+                <div style="flex:1;min-width:140px"><label class="field" for="newUserPass">Пароль</label><input type="password" id="newUserPass" autocomplete="new-password" /></div>
+                <button type="button" class="btn" id="btnCreateUser">Создать</button>
+              </div>
+              <p id="userAdminErr" class="status err hidden"></p>
+              <table id="userAdminTbl" style="width:100%"><thead><tr><th>Логин</th><th>Tenant</th><th></th></tr></thead><tbody></tbody></table>
             </div>
             <div class="card">
               <h2>Отладка</h2>
@@ -2097,6 +2148,7 @@
     /** Последняя история с сервера (GET messages); для оптимистичного UI до ответа LLM. */
     let chatMessagesSnapshot = [];
     let authConfigured = false;
+    let sessionLoginConfigured = false;
     const collections = [];
     let currentView = "chat";
     const knowledgeSelStore = "knowledge_ui_selection";
@@ -2514,7 +2566,7 @@
         if (nOk > 0 && openDocSucceeded) {
           const nn = findSectionNode(targetCid);
           if (nn) {
-            const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(targetCid) + "/documents"), { headers: headers(false) });
+            const rr = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(targetCid) + "/documents"), { headers: headers(false) });
             if (rr.ok) {
               const list = await rr.json();
               const drow = (list || []).find((x) => x.id === openSel);
@@ -2631,7 +2683,7 @@
             const rc = reopenDocAfter.cid;
             const rd = reopenDocAfter.did;
             const nn = findSectionNode(rc);
-            const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(rc) + "/documents"), { headers: headers(false) });
+            const rr = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(rc) + "/documents"), { headers: headers(false) });
             if (rr.ok) {
               const list = await rr.json();
               const drow = (list || []).find((x) => x.id === rd);
@@ -3001,7 +3053,7 @@
       setKbTreeBusy(true, "Загрузка дерева…");
       errBox($("kbTreeErr"), "");
       try {
-        const r = await fetch(apiPath("/v1/collections/tree"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/collections/tree"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         knowledgeTreeRoots = await r.json();
         renderKbTree();
@@ -3018,7 +3070,7 @@
       const grid = $("knowledgeStatsGrid");
       if (grid) grid.innerHTML = "";
       try {
-        const r = await fetch(apiPath("/v1/knowledge/stats"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/knowledge/stats"), { headers: headers(false) });
         if ($("knowledgeStatsLoader")) $("knowledgeStatsLoader").style.display = "none";
         if (!r.ok) throw new Error(await r.text());
         const s = await r.json();
@@ -3128,7 +3180,7 @@
       if (!ok) return;
       errBox($("colErr"), "");
       try {
-        const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(node.id)), { method: "DELETE", headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(node.id)), { method: "DELETE", headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         if (localStorage.getItem(cidStore) === node.id) localStorage.removeItem(cidStore);
         if (knowledgeSelection && knowledgeSelection.sectionId === node.id) showDocsPlaceholder();
@@ -3145,6 +3197,11 @@
       if (k) h["X-API-Key"] = k;
       if (localStorage.getItem(debugStore) === "1") h["X-Debug"] = "1";
       return h;
+    }
+    function fetchWithCred(url, init) {
+      const i = init || {};
+      if (!i.credentials) i.credentials = "include";
+      return fetch(url, i);
     }
     function applyDebugFromStorage() {
       const d = $("debugMode");
@@ -3374,6 +3431,98 @@
         input.select();
       });
     }
+    function applyLoginGate() {
+      const gate = $("loginGate");
+      if (!gate) return;
+      const k = $("apiKey") && $("apiKey").value.trim();
+      const needGate =
+        authConfigured && sessionLoginConfigured && !window.__AUTH_ME && !k;
+      gate.classList.toggle("hidden", !needGate);
+      updateTopbarSession();
+    }
+
+    /** Отображается только для логина/пароля (subject не ключевой техно-id); см. Principal с API-ключа. */
+    function isBrowserSessionPrincipal(me) {
+      if (!me || me.subject == null || String(me.subject).trim() === "") return false;
+      const s = String(me.subject);
+      return s !== "api_admin" && s !== "api_member" && s !== "api_legacy";
+    }
+
+    function updateTopbarSession() {
+      const wrap = $("topbarSession");
+      const label = $("topbarSessionUser");
+      if (!wrap || !label) return;
+      const me = window.__AUTH_ME;
+      if (isBrowserSessionPrincipal(me)) {
+        wrap.classList.remove("hidden");
+        label.textContent = me.subject;
+        label.setAttribute("title", "Вошли как: " + me.subject);
+        wrap.setAttribute("aria-label", "Текущий пользователь: " + String(me.subject));
+      } else {
+        wrap.classList.add("hidden");
+        label.textContent = "";
+        label.setAttribute("title", "");
+        wrap.removeAttribute("aria-label");
+      }
+    }
+    function applyDemoRestrictions() {
+      const me = window.__AUTH_ME;
+      const demo = me && me.is_demo;
+      [
+        "btnCreateCol","btnRefreshCols","btnUpload","btnDelCol","btnEditSection",
+        "fileIn","dropZone","btnDelDocFromDetail","btnEditDoc","newColName","newColParentId"
+      ].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.disabled = !!demo;
+        el.style.opacity = demo ? "0.45" : "";
+        el.style.pointerEvents = demo ? "none" : "";
+      });
+    }
+    async function loadUsersAdmin() {
+      const card = $("userAdminCard");
+      if (!card) return;
+      const me = window.__AUTH_ME;
+      const err = $("userAdminErr");
+      if (err) { err.textContent = ""; err.classList.add("hidden"); }
+      if (!me || !me.can_manage_users) {
+        card.classList.add("hidden");
+        return;
+      }
+      card.classList.remove("hidden");
+      const tbody = $("userAdminTbl") && $("userAdminTbl").querySelector("tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      try {
+        const r = await fetchWithCred(apiPath("/v1/admin/users"), { headers: headers(false) });
+        if (!r.ok) throw new Error(await r.text());
+        const rows = await r.json();
+        rows.forEach((u) => {
+          const tr = document.createElement("tr");
+          const td1 = document.createElement("td"); td1.textContent = String(u.username || "");
+          const td2 = document.createElement("td"); td2.className = "mono"; td2.textContent = String(u.tenant_id || "");
+          const td3 = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.type = "button"; btn.className = "btn danger"; btn.textContent = "Удалить";
+          btn.onclick = async () => {
+            const rr = await fetchWithCred(apiPath("/v1/admin/users/" + encodeURIComponent(u.id)), { method: "DELETE", headers: headers(false) });
+            if (!rr.ok) {
+              if (err) {
+                err.textContent = await rr.text();
+                err.classList.remove("hidden");
+              }
+              return;
+            }
+            loadUsersAdmin();
+          };
+          td3.appendChild(btn);
+          tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        if (err) { err.textContent = String(e); err.classList.remove("hidden"); }
+      }
+    }
     function applyKeyFromStorage() {
       const el = $("apiKey");
       if (!el) return;
@@ -3393,10 +3542,82 @@
         if ($("apiKey")) $("apiKey").value = "";
       }
     }
-    $("saveKey").onclick = () => {
+    $("saveKey").onclick = async () => {
       localStorage.setItem(keyStore, $("apiKey").value.trim());
       showHead("Ключ сохранён в localStorage.", true);
+      await loadHealth();
     };
+    if ($("btnLoginSubmit")) {
+      $("btnLoginSubmit").onclick = async () => {
+        const lu = $("loginUser").value.trim();
+        const lp = $("loginPass").value;
+        const err = $("loginErr");
+        if (err) { err.textContent = ""; err.classList.add("hidden"); }
+        if (!lu || !lp) {
+          if (err) { err.textContent = "Введите логин и пароль"; err.classList.remove("hidden"); }
+          return;
+        }
+        try {
+          const r = await fetchWithCred(apiPath("/v1/auth/login"), {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ username: lu, password: lp })
+          });
+          const t = await r.text();
+          if (!r.ok) throw new Error(t);
+          $("loginPass").value = "";
+          await loadHealth();
+        } catch (e) {
+          if (err) { err.textContent = String(e); err.classList.remove("hidden"); }
+        }
+      };
+    }
+    if ($("btnLogout")) {
+      $("btnLogout").onclick = async () => {
+        try {
+          const r = await fetchWithCred(apiPath("/v1/auth/logout"), {
+            method: "POST",
+            headers: headers(false)
+          });
+          const t = await r.text();
+          if (!r.ok) throw new Error(t || "logout failed");
+        } catch (e) {
+          showHead(String(e), false);
+          return;
+        }
+        if ($("loginUser")) $("loginUser").value = "";
+        if ($("loginPass")) $("loginPass").value = "";
+        showHead("Вы вышли из сессии.", true);
+        await loadHealth();
+      };
+    }
+    if ($("btnCreateUser")) {
+      $("btnCreateUser").onclick = async () => {
+        const u = $("newUserLogin").value.trim();
+        const p = $("newUserPass").value;
+        const err = $("userAdminErr");
+        if (err) { err.textContent = ""; err.classList.add("hidden"); }
+        if (!u || !p) {
+          if (err) { err.textContent = "Логин и пароль обязательны"; err.classList.remove("hidden"); }
+          return;
+        }
+        try {
+          const r = await fetchWithCred(apiPath("/v1/admin/users"), {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ username: u, password: p, site_role: "member" }),
+          });
+          const t = await r.text();
+          if (!r.ok) throw new Error(t);
+          $("newUserPass").value = "";
+          $("newUserLogin").value = "";
+          await loadUsersAdmin();
+          showHead("Пользователь создан.", true);
+        } catch (e) {
+          if (err) { err.textContent = String(e); err.classList.remove("hidden"); }
+        }
+      };
+    }
 
     function setSidebarForView(name) {
       $("sidebar-chat-panel").classList.toggle("hidden", name !== "chat");
@@ -3887,7 +4108,7 @@
       let actionText = null;
       let actionOk = true;
       try {
-        const r = await fetch(apiPath("/v1/rag-test/run"), {
+        const r = await fetchWithCred(apiPath("/v1/rag-test/run"), {
           method: "POST",
           headers: headers(true),
           body: JSON.stringify({ question: q, scope, profile: prof, debug: localStorage.getItem(debugStore) === "1" })
@@ -4195,7 +4416,7 @@
       let actionText = null;
       let actionOk = true;
       try {
-        const r = await fetch(apiPath("/v1/rag-test/compare"), {
+        const r = await fetchWithCred(apiPath("/v1/rag-test/compare"), {
           method: "POST",
           headers: headers(true),
           body: JSON.stringify({ question: q, scope, left_profile: left, right_profile: right, debug: localStorage.getItem(debugStore) === "1" })
@@ -4336,7 +4557,7 @@
       if (!ul) return;
       ul.innerHTML = "";
       try {
-        const r = await fetch(apiPath("/v1/rag-test/favorites"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/rag-test/favorites"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const rows = await r.json();
         const saved = localStorage.getItem(testFavoriteStore);
@@ -4379,7 +4600,7 @@
 
     async function selectTestFavorite(id) {
       try {
-        const r = await fetch(apiPath("/v1/rag-test/favorites/" + encodeURIComponent(id)), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/rag-test/favorites/" + encodeURIComponent(id)), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const snap = await r.json();
         await applyTestFavoriteSnapshot(snap);
@@ -4398,7 +4619,7 @@
       });
       if (!ok) return;
       try {
-        const rr = await fetch(apiPath("/v1/rag-test/favorites/" + encodeURIComponent(id)), { method: "DELETE", headers: headers(false) });
+        const rr = await fetchWithCred(apiPath("/v1/rag-test/favorites/" + encodeURIComponent(id)), { method: "DELETE", headers: headers(false) });
         if (!rr.ok) throw new Error(await rr.text());
         if (activeTestFavoriteId === id) {
           activeTestFavoriteId = null;
@@ -4411,7 +4632,7 @@
     async function saveCurrentTestFavorite() {
       const body = captureTestFavoriteSnapshot();
       try {
-        const r = await fetch(apiPath("/v1/rag-test/favorites"), {
+        const r = await fetchWithCred(apiPath("/v1/rag-test/favorites"), {
           method: "POST",
           headers: headers(true),
           body: JSON.stringify(body),
@@ -4472,7 +4693,7 @@
       const el = $("mainChatProfileOut");
       if (!el) return;
       try {
-        const r = await fetch(apiPath("/v1/rag-test/main-chat-profile"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/rag-test/main-chat-profile"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const j = await r.json();
         el.textContent = j.profile ? JSON.stringify(j.profile, null, 2) : "нет overrides (env defaults)";
@@ -4485,7 +4706,7 @@
       const btn = $("btnResetMainChatProfile");
       if (btn) btn.disabled = true;
       try {
-        const r = await fetch(apiPath("/v1/rag-test/main-chat-profile"), { method: "DELETE", headers: headers(true) });
+        const r = await fetchWithCred(apiPath("/v1/rag-test/main-chat-profile"), { method: "DELETE", headers: headers(true) });
         const t = await r.text();
         if (!r.ok) throw new Error(t);
         await loadMainChatProfileUi();
@@ -4517,7 +4738,7 @@
       setBusy(true);
       setTestActionStatus("Применяем профиль " + letter + " к чату…", true);
       try {
-        const r = await fetch(apiPath("/v1/rag-test/apply-to-chat"), {
+        const r = await fetchWithCred(apiPath("/v1/rag-test/apply-to-chat"), {
           method: "POST",
           headers: headers(true),
           body: JSON.stringify({ profile: prof })
@@ -4535,17 +4756,30 @@
 
     async function loadHealth() {
       try {
-        const r = await fetch(apiPath("/v1/health"));
+        const r = await fetchWithCred(apiPath("/v1/health"));
         const j = await r.json();
         authConfigured = !!j.auth_configured;
+        sessionLoginConfigured = !!j.session_login_configured;
         applyAuthUi();
         $("healthOut").textContent = JSON.stringify(j, null, 2);
         $("healthOut").className = "status ok mono";
+        window.__AUTH_ME = null;
+        try {
+          const mr = await fetchWithCred(apiPath("/v1/auth/me"), { headers: headers(false) });
+          if (mr.ok) window.__AUTH_ME = await mr.json();
+        } catch (_) { window.__AUTH_ME = null; }
+        applyLoginGate();
+        applyDemoRestrictions();
+        loadUsersAdmin();
       } catch (e) {
         authConfigured = false;
+        sessionLoginConfigured = false;
+        window.__AUTH_ME = null;
         applyAuthUi();
         $("healthOut").textContent = String(e);
         $("healthOut").className = "status err mono";
+        applyLoginGate();
+        applyDemoRestrictions();
       }
     }
 
@@ -4730,7 +4964,7 @@
       tb.innerHTML = "";
       collections.length = 0;
       try {
-        const r = await fetch(apiPath("/v1/collections"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/collections"), { headers: headers(false) });
         if (!r.ok) throw new Error(r.status + " " + (await r.text()));
         const rows = await r.json();
         for (const c of rows) collections.push(c);
@@ -4775,7 +5009,7 @@
       const p = $("newColParentId") && $("newColParentId").value.trim();
       const body = { name: name, parent_id: p || null };
       try {
-        const r = await fetch(apiPath("/v1/collections"), { method: "POST", headers: headers(true), body: JSON.stringify(body) });
+        const r = await fetchWithCred(apiPath("/v1/collections"), { method: "POST", headers: headers(true), body: JSON.stringify(body) });
         if (!r.ok) throw new Error(await r.text());
         $("newColName").value = "";
         await loadCollections();
@@ -4788,7 +5022,7 @@
       tb.innerHTML = "";
       if (!selectedCid) return;
       try {
-        const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const rows = await r.json();
         const secNode = findSectionNode(selectedCid);
@@ -4816,7 +5050,7 @@
           const del = document.createElement("button"); del.className = "btn danger"; del.textContent = "Удалить";
           del.onclick = async () => {
             try {
-              const rr = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents/" + encodeURIComponent(did)), { method: "DELETE", headers: headers(false) });
+              const rr = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents/" + encodeURIComponent(did)), { method: "DELETE", headers: headers(false) });
               if (!rr.ok) throw new Error(await rr.text());
               if (knowledgeSelection && knowledgeSelection.type === "document" && knowledgeSelection.documentId === did) {
                 const pn = secNode || { id: selectedCid, name: $("selName").textContent };
@@ -4854,7 +5088,7 @@
       fd.append("file", f);
       const kh = headers(false);
       try {
-        const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { method: "POST", headers: { ...kh }, body: fd });
+        const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { method: "POST", headers: { ...kh }, body: fd });
         if (!r.ok) throw new Error(await r.text());
         if (fin) fin.value = "";
         await loadDocs();
@@ -4890,7 +5124,7 @@
       errBox($("colErr"), "");
       const gone = selectedCid;
       try {
-        const r = await fetch(apiPath("/v1/collections/" + encodeURIComponent(selectedCid)), { method: "DELETE", headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid)), { method: "DELETE", headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         if (localStorage.getItem(cidStore) === gone) localStorage.removeItem(cidStore);
         selectedCid = null;
@@ -5102,7 +5336,7 @@
             });
             if (!ok) return;
             try {
-              const rr = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(t.id)), { method: "DELETE", headers: headers(false) });
+              const rr = await fetchWithCred(apiPath("/v1/chat/threads/" + encodeURIComponent(t.id)), { method: "DELETE", headers: headers(false) });
               if (!rr.ok) throw new Error(await rr.text());
               if (activeThreadId === t.id) { activeThreadId = null; localStorage.removeItem(threadStore); }
               await loadThreads();
@@ -5140,7 +5374,7 @@
         return;
       }
       try {
-        const r = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(activeThreadId) + "/messages"), { headers: headers(false) });
+        const r = await fetchWithCred(apiPath("/v1/chat/threads/" + encodeURIComponent(activeThreadId) + "/messages"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
         const msgs = await r.json();
         chatMessagesSnapshot = msgs.map((row) => ({ ...row }));
@@ -5161,7 +5395,7 @@
       });
       if (t == null || !t.trim()) return;
       try {
-        const r = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(id)), {
+        const r = await fetchWithCred(apiPath("/v1/chat/threads/" + encodeURIComponent(id)), {
           method: "PATCH",
           headers: headers(true),
           body: JSON.stringify({ title: t.trim() }),
@@ -5176,7 +5410,7 @@
       const o = getRagScopeObject();
       const body = o.all ? { rag: { all: true } } : { rag: { ids: o.ids } };
       try {
-        const r = await fetch(apiPath("/v1/chat/threads"), {
+        const r = await fetchWithCred(apiPath("/v1/chat/threads"), {
           method: "POST",
           headers: headers(true),
           body: JSON.stringify(body),
@@ -5210,7 +5444,7 @@
       ]);
       setChatLoading(true);
       try {
-        const r = await fetch(apiPath("/v1/chat/threads/" + encodeURIComponent(activeThreadId) + "/messages"), {
+        const r = await fetchWithCred(apiPath("/v1/chat/threads/" + encodeURIComponent(activeThreadId) + "/messages"), {
           method: "POST",
           headers: headers(true),
           body: JSON.stringify({ message: msg }),
