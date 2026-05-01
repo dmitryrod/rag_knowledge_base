@@ -15,7 +15,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.auth_dep import get_auth, require_admin
+from app.auth_dep import (
+    Principal,
+    get_auth,
+    get_principal,
+    require_admin,
+    should_filter_chat_by_owner,
+)
 from app import deps
 from app.config import Settings, get_settings
 from app.db_sqlite import MetadataDB
@@ -167,6 +173,16 @@ def _favorites_dir(settings: Settings) -> Path:
     d = td / "tests_favorite"
     d.mkdir(parents=True, exist_ok=True)
     return d.resolve()
+
+
+def _favorite_accessible(principal: Principal, doc: dict[str, Any]) -> bool:
+    """Избранные тесты в общем workspace: registry-юзеры видят только свои записи (по owner_subject)."""
+    if not should_filter_chat_by_owner(principal):
+        return True
+    owner = doc.get("owner_subject")
+    if owner is None or owner == "":
+        return False
+    return str(owner) == str(principal.subject)
 
 
 def _parse_favorite_id_from_filename(name: str) -> int | None:
@@ -533,7 +549,10 @@ async def main_chat_apply(
 
 
 @router.get("/rag-test/favorites", response_model=list[TestFavoriteSummary])
-async def list_test_favorites(settings: Settings = Depends(get_settings)) -> list[TestFavoriteSummary]:
+async def list_test_favorites(
+    settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
+) -> list[TestFavoriteSummary]:
     d = _favorites_dir(settings)
     out: list[TestFavoriteSummary] = []
     try:
@@ -556,6 +575,8 @@ async def list_test_favorites(settings: Settings = Depends(get_settings)) -> lis
             continue
         if not isinstance(j, dict):
             continue
+        if not _favorite_accessible(principal, j):
+            continue
         fid = str(j.get("id") or p.stem)
         if not _FAVORITE_ID_RE.match(fid):
             fid = p.stem
@@ -577,6 +598,7 @@ async def list_test_favorites(settings: Settings = Depends(get_settings)) -> lis
 async def create_test_favorite(
     body: TestFavoriteCreate,
     settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
 ) -> TestFavoriteOut:
     from app.db_sqlite import utc_now_iso
 
@@ -587,6 +609,7 @@ async def create_test_favorite(
         "id": fid,
         "created_at": now,
         "updated_at": now,
+        "owner_subject": principal.subject,
         "question": body.question,
         "scope_ui": body.scope_ui,
         "scope_api": body.scope_api,
@@ -620,6 +643,7 @@ async def create_test_favorite(
 async def get_test_favorite(
     favorite_id: str,
     settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
 ) -> TestFavoriteOut:
     d = _favorites_dir(settings)
     path = _favorite_file_path(d, favorite_id)
@@ -631,6 +655,8 @@ async def get_test_favorite(
         raise HTTPException(status_code=500, detail="Corrupt favorite file") from e
     if not isinstance(j, dict):
         raise HTTPException(status_code=500, detail="Invalid favorite file")
+    if not _favorite_accessible(principal, j):
+        raise HTTPException(status_code=404, detail="Favorite not found")
     return TestFavoriteOut(
         id=str(j.get("id") or favorite_id),
         created_at=str(j.get("created_at") or ""),
@@ -651,10 +677,19 @@ async def get_test_favorite(
 async def delete_test_favorite(
     favorite_id: str,
     settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
 ) -> dict[str, str]:
     d = _favorites_dir(settings)
     path = _favorite_file_path(d, favorite_id)
     if not path.is_file():
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    try:
+        j = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(status_code=500, detail="Corrupt favorite file") from None
+    if not isinstance(j, dict):
+        raise HTTPException(status_code=500, detail="Invalid favorite file")
+    if not _favorite_accessible(principal, j):
         raise HTTPException(status_code=404, detail="Favorite not found")
     try:
         path.unlink()

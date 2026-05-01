@@ -119,3 +119,53 @@ def test_tenant_data_paths_after_init(client_session: TestClient) -> None:
     data = Path(get_settings().data_dir)
     assert (data / "tenants" / "env_admin" / "metadata.db").is_file()
     assert (data / "registry.db").is_file()
+
+
+def test_rag_test_favorites_per_owner_in_shared_workspace(client_session: TestClient) -> None:
+    """При workspace_tenant_id=env_admin избранные A/B не общие: member не видит и не удаляет чужие."""
+    fav_body = {
+        "question": "shared workspace q",
+        "scope_ui": {"kind": "all", "sectionIds": [], "docs": {}},
+        "scope_api": {"all": True},
+        "profile_a": {"retrieval_top_k": 3},
+        "profile_b": {"retrieval_top_k": 5},
+        "outputs": {},
+        "schema_version": 1,
+    }
+    assert client_session.post(
+        "/v1/auth/login",
+        json={"username": "admin", "password": "adminpass"},
+    ).status_code == 200
+    admin_fav = client_session.post("/v1/rag-test/favorites", json=fav_body)
+    assert admin_fav.status_code == 200, admin_fav.text
+    admin_fid = admin_fav.json()["id"]
+
+    created = client_session.post(
+        "/v1/admin/users",
+        json={
+            "username": "shared_fav_member",
+            "password": "pw_shared_fav",
+            "site_role": "member",
+            "workspace_tenant_id": "env_admin",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    assert client_session.post("/v1/auth/logout", json={}).status_code == 200
+    assert client_session.post(
+        "/v1/auth/login",
+        json={"username": "shared_fav_member", "password": "pw_shared_fav"},
+    ).status_code == 200
+
+    lst = client_session.get("/v1/rag-test/favorites")
+    assert lst.status_code == 200
+    assert admin_fid not in [x["id"] for x in lst.json()]
+    assert client_session.get(f"/v1/rag-test/favorites/{admin_fid}").status_code == 404
+    assert client_session.delete(f"/v1/rag-test/favorites/{admin_fid}").status_code == 404
+
+    mine = client_session.post("/v1/rag-test/favorites", json=fav_body)
+    assert mine.status_code == 200, mine.text
+    my_id = mine.json()["id"]
+    lst2 = client_session.get("/v1/rag-test/favorites")
+    assert my_id in [x["id"] for x in lst2.json()]
+    assert client_session.delete(f"/v1/rag-test/favorites/{my_id}").status_code == 200
