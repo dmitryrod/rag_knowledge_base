@@ -437,6 +437,16 @@
       padding: 0.25rem 0.4rem; border-radius: var(--radius-md);
       border: 1px dashed var(--ghost-border);
       flex: 0 0 auto; max-width: 100%;
+      cursor: pointer;
+    }
+    .kb-tree-root-drop:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+    .kb-tree-root-drop.kb-active {
+      border-color: var(--primary);
+      color: var(--on-surface);
+      background: var(--surface-container-low);
     }
     .kb-tree-root-drop.kb-drop-inside { outline: 2px solid var(--primary); background: var(--surface-container); }
     .kb-doc-row.kb-doc-multi {
@@ -624,6 +634,25 @@
       margin-right: 0;
       width: 100%;
       box-sizing: border-box;
+    }
+    /* Документы: «Новый раздел» и «Импорт по ключу» — одинаковая высота (ровно по большей колонке) */
+    .kb-new-import-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: stretch; /* обе колонки по высоте самой высокой */
+      margin-bottom: 0.75rem;
+    }
+    .kb-new-import-row .kb-subcard {
+      flex: 1;
+      min-width: 240px;
+      border: 1px solid var(--outline-variant);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
     #view-chat .chat-layout {
       display: flex;
@@ -1733,7 +1762,7 @@
           <div id="kbTreeEmpty" class="sidebar-hint hidden" style="text-align:center; padding:0.75rem 0.4rem">Нет разделов. Создайте раздел в центре.</div>
           <div id="kbTreeScroll" class="kb-tree-scroll" aria-label="Дерево разделов и документов">
             <div class="kb-tree-root-bar">
-              <div id="kbTreeRootDrop" class="kb-tree-root-drop" title="Перетащите сюда, чтобы сделать раздел корневым (верхний уровень)">Корень</div>
+              <div id="kbTreeRootDrop" class="kb-tree-root-drop" role="button" tabindex="0" title="Клик — обзор корня и выдача ключа на всё дерево. Перетащите сюда раздел, чтобы сделать его корневым (верхний уровень).">Корень</div>
               <span id="kbTreeSpinner" class="spin" hidden aria-hidden="true"></span>
               <span id="kbTreeStatusLine" class="kb-tree-status-line" aria-live="polite"></span>
             </div>
@@ -1799,8 +1828,8 @@
                 Дерево слева. <strong>Новый раздел</strong> — в вашем хранилище (родитель из списка или «Корень»).
                 <strong>Импорт по ключу</strong> — по share-token от администратора источника, не по ID папки.
               </p>
-              <div class="row" style="margin-bottom:0.75rem; flex-wrap:wrap; gap:0.75rem; align-items:flex-start">
-                <div style="flex:1; min-width:240px; border:1px solid var(--outline-variant); border-radius:8px; padding:0.65rem 0.75rem">
+              <div class="kb-new-import-row">
+                <div class="kb-subcard">
                   <div style="font-weight:600; margin-bottom:0.35rem">Новый раздел</div>
                   <p style="color:var(--on-surface-variant); font-size:0.82rem; margin:0 0 0.5rem 0">Локальный раздел; при выборе папки в дереве родитель здесь синхронизируется.</p>
                   <div class="row" style="flex-wrap:wrap; gap:0.5rem; align-items:flex-end">
@@ -1822,7 +1851,7 @@
                     <input type="text" id="newColParentAdv" class="mono" placeholder="перекрывает выбор списком" autocomplete="off" style="width:100%; box-sizing:border-box" />
                   </details>
                 </div>
-                <div style="flex:1; min-width:240px; border:1px solid var(--outline-variant); border-radius:8px; padding:0.65rem 0.75rem">
+                <div class="kb-subcard">
                   <div style="font-weight:600; margin-bottom:0.35rem">Импорт по ключу</div>
                   <p style="color:var(--on-surface-variant); font-size:0.82rem; margin:0 0 0.5rem 0">Вставьте <strong>share_token</strong>, который admin источника получает кнопкой «Выдать ключ» на выбранном разделе. UUID раздела сюда не подходит.</p>
                   <div class="row" style="flex-wrap:wrap; gap:0.5rem; align-items:flex-end">
@@ -1851,7 +1880,7 @@
                 Выберите раздел или документ в дереве слева.
               </div>
               <div class="hidden" id="colPanel">
-                <h2>Раздел: <span id="selName"></span></h2>
+                <h2 id="colPanelMainHeading"><span id="colPanelHeadingPrefix">Раздел:</span> <span id="selName"></span></h2>
                 <p class="mono" id="selId"></p>
                 <div class="row" style="margin:0.4rem 0; gap:0.35rem; flex-wrap:wrap">
                   <button type="button" class="btn secondary" id="btnEditSection">Переименовать</button>
@@ -1861,9 +1890,9 @@
                 <div id="shareSectionOut" class="status mono" style="font-size:0.8rem; white-space:pre-wrap"></div>
                 <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:1rem 0 0.4rem 0">Подразделы</h3>
                 <ul id="sectionChildrenList" class="kb-inline-list" style="list-style:none; padding:0; margin:0 0 0.75rem 0; min-height:0"></ul>
-                <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Загрузка</h3>
+                <h3 id="colPanelUploadH3" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Загрузка</h3>
                 <div class="drop-zone" id="dropZone">Перетащите файл сюда или выберите ниже</div>
-                <div class="row" style="margin:0.5rem 0">
+                <div class="row" id="colPanelUploadRow" style="margin:0.5rem 0">
                   <input type="file" id="fileIn" />
                   <button type="button" class="btn" id="btnUpload">Загрузить</button>
                   <div id="uploadStatus" class="upload-status hidden" role="status" aria-live="polite" aria-busy="false">
@@ -2247,6 +2276,11 @@
       if (sel) sel.value = name;
     }
     const cidStore = "knowledge_selected_cid";
+    /** Виртуальный выбор «Корень» в UI (не UUID строки БД). */
+    const UI_KB_ROOT_ID = "__kb_ui_root__";
+    /** POST /v1/collections/{id}/share — ключ на все корневые разделы tenant. */
+    const SHARE_TENANT_KB_ROOT_ID = "__share_tenant_kb_root__";
+    var kbTreeDnDEndTs = 0;
     const ragScopeStore = "knowledge_rag_scope";
     const threadStore = "knowledge_active_thread_id";
     const sidebarWidthStore = "knowledge_sidebar_width";
@@ -2882,9 +2916,25 @@
       const sc = $("kbTreeScroll");
       if (!sc || sc.__kbDndInited) return;
       sc.__kbDndInited = true;
+      const rootDrop = $("kbTreeRootDrop");
+      if (rootDrop && !rootDrop.__kbRootClickInited) {
+        rootDrop.__kbRootClickInited = true;
+        rootDrop.addEventListener("click", (e) => {
+          if (e.button !== 0) return;
+          if (typeof kbTreeDnDEndTs === "number" && Date.now() - kbTreeDnDEndTs < 400) return;
+          e.preventDefault();
+          selectKbRoot();
+        });
+        rootDrop.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selectKbRoot();
+          }
+        });
+      }
       sc.addEventListener("dragover", onKbTreeContainerDragOver);
       sc.addEventListener("drop", onKbTreeContainerDrop);
-      document.addEventListener("dragend", () => { treeDndPayload = null; clearTreeDropClasses(); });
+      document.addEventListener("dragend", () => { treeDndPayload = null; clearTreeDropClasses(); kbTreeDnDEndTs = Date.now(); });
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           clearTreeDropClasses();
@@ -2894,6 +2944,13 @@
       });
     }
     function markTreeActive() {
+      const rootDrop = $("kbTreeRootDrop");
+      if (rootDrop) {
+        rootDrop.classList.remove("kb-active");
+        if (knowledgeSelection && knowledgeSelection.type === "section" && knowledgeSelection.sectionId === UI_KB_ROOT_ID) {
+          rootDrop.classList.add("kb-active");
+        }
+      }
       document.querySelectorAll(".kb-tree-row").forEach((el) => {
         el.classList.remove("kb-active");
         if (!knowledgeSelection) return;
@@ -2955,12 +3012,89 @@
       if ($("mountColParentSelect")) $("mountColParentSelect").value = "";
       if ($("newColParentAdv")) $("newColParentAdv").value = "";
       clearKbDocMultiSelect();
+      const rootDrop = $("kbTreeRootDrop");
+      if (rootDrop) rootDrop.classList.remove("kb-active");
+      markTreeActive();
+    }
+    function applyColPanelMode(isKbRoot) {
+      const h3u = $("colPanelUploadH3");
+      const dz = $("dropZone");
+      const row = $("colPanelUploadRow");
+      const fi = $("fileIn");
+      const bu = $("btnUpload");
+      const be = $("btnEditSection");
+      const bd = $("btnDelCol");
+      if (h3u) h3u.style.display = isKbRoot ? "none" : "";
+      if (dz) {
+        dz.style.display = isKbRoot ? "none" : "";
+        if (!isKbRoot) dz.classList.remove("disabled");
+      }
+      if (row) row.style.display = isKbRoot ? "none" : "";
+      if (fi) fi.disabled = !!isKbRoot;
+      if (bu) bu.disabled = !!isKbRoot;
+      if (be) {
+        be.style.display = isKbRoot ? "none" : "";
+        be.disabled = !!isKbRoot;
+      }
+      if (bd) {
+        bd.style.display = isKbRoot ? "none" : "";
+        bd.disabled = !!isKbRoot;
+      }
+      if (!isKbRoot && bu) bu.disabled = false;
+    }
+    function selectKbRoot() {
+      if (currentView !== "docs") setView("docs");
+      selectedCid = UI_KB_ROOT_ID;
+      localStorage.setItem(cidStore, selectedCid);
+      knowledgeSelection = { type: "section", sectionId: UI_KB_ROOT_ID };
+      try { localStorage.setItem(knowledgeSelStore, JSON.stringify(knowledgeSelection)); } catch (e) { /* */ }
+      const pfx = $("colPanelHeadingPrefix");
+      if (pfx) { pfx.style.display = "none"; pfx.textContent = "Раздел:"; }
+      $("selName").textContent = "Корень хранилища";
+      $("selId").textContent = "Не отдельный раздел в БД. Здесь — обзор всех корневых папок; «Выдать ключ» создаёт share_token на всё дерево этого хранилища для импорта у другого пользователя.";
+      if ($("colPanel")) $("colPanel").classList.remove("hidden");
+      if ($("docsNoSelection")) $("docsNoSelection").classList.add("hidden");
+      if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
+      applyColPanelMode(true);
+      if ($("newColParentSelect")) $("newColParentSelect").value = "";
+      if ($("mountColParentSelect")) $("mountColParentSelect").value = "";
+      if ($("newColParentAdv")) $("newColParentAdv").value = "";
+      if ($("newColParentHint")) { $("newColParentHint").style.display = "none"; }
+      if ($("shareSectionOut")) $("shareSectionOut").textContent = "";
+      if ($("btnShareSection")) {
+        $("btnShareSection").style.display = "";
+        const demo = window.__AUTH_ME && window.__AUTH_ME.is_demo;
+        $("btnShareSection").disabled = !!demo;
+        $("btnShareSection").title = "Выдать share_token на всё дерево (все корневые разделы и вложенность) для импорта другим tenant";
+      }
+      fillSectionChildrenFromTree(UI_KB_ROOT_ID);
+      loadDocs();
       markTreeActive();
     }
     function fillSectionChildrenFromTree(sectionId) {
       const ul = $("sectionChildrenList");
       if (!ul) return;
       ul.innerHTML = "";
+      if (sectionId === UI_KB_ROOT_ID) {
+        const roots = knowledgeTreeRoots || [];
+        if (!roots.length) {
+          const li = document.createElement("li");
+          li.textContent = "—";
+          li.style.cssText = "color:var(--on-surface-variant); font-size:0.85rem";
+          ul.appendChild(li);
+          return;
+        }
+        for (const ch of roots) {
+          const li = document.createElement("li");
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = ch.name;
+          b.onclick = () => { openSectionInMain(ch); };
+          li.appendChild(b);
+          ul.appendChild(li);
+        }
+        return;
+      }
       const node = findSectionNode(sectionId);
       if (!node || !node.children || !node.children.length) {
         const li = document.createElement("li");
@@ -3157,6 +3291,7 @@
         mount.appendChild(renderSectionNode(n, 0, null));
       }
       pruneKbDocMulti();
+      if (selectedCid === UI_KB_ROOT_ID) fillSectionChildrenFromTree(UI_KB_ROOT_ID);
       markTreeActive();
       initKbTreeLabelTitles();
       scheduleKbTreeLabelTitles();
@@ -5209,7 +5344,8 @@
           var opt = document.createElement("option");
           opt.value = c.id;
           var nm = String(c.name || "").trim();
-          opt.textContent = Array(ordered[i].depth + 1).join("  ") + (ordered[i].depth ? "↳ " : "") + (nm || c.id) + " — " + String(c.id).slice(0, 8) + "…";
+          var label = nm || "Без имени";
+          opt.textContent = Array(ordered[i].depth + 1).join("  ") + (ordered[i].depth ? "↳ " : "") + label;
           sel.appendChild(opt);
         }
         var vals = [];
@@ -5225,11 +5361,18 @@
       localStorage.setItem(cidStore, selectedCid);
       knowledgeSelection = { type: "section", sectionId: c.id };
       try { localStorage.setItem(knowledgeSelStore, JSON.stringify(knowledgeSelection)); } catch (e) { /* */ }
+      const pfx = $("colPanelHeadingPrefix");
+      if (pfx) {
+        pfx.style.display = "";
+        pfx.textContent = "Раздел:";
+      }
       $("selName").textContent = c.name;
       $("selId").textContent = c.id;
+      applyColPanelMode(false);
       if ($("colPanel")) $("colPanel").classList.remove("hidden");
       if ($("docsNoSelection")) $("docsNoSelection").classList.add("hidden");
       if ($("docDetailPanel")) $("docDetailPanel").classList.add("hidden");
+      if ($("btnShareSection")) $("btnShareSection").style.display = "";
       if ($("newColParentSelect")) {
         const ns = $("newColParentSelect");
         const ids = []; for (let i = 0; i < ns.options.length; i++) ids.push(ns.options[i].value);
@@ -5288,7 +5431,9 @@
         await loadKnowledgeTree();
         await loadKnowledgeStats();
         const saved = localStorage.getItem(cidStore);
-        if (saved && collections.some((c) => c.id === saved)) {
+        if (saved === UI_KB_ROOT_ID) {
+          selectKbRoot();
+        } else if (saved && collections.some((c) => c.id === saved)) {
           const c = collections.find((x) => x.id === saved);
           if (c) selectCollection(c);
         } else {
@@ -5346,6 +5491,16 @@
       const tb = document.querySelector("#tblDocs tbody");
       tb.innerHTML = "";
       if (!selectedCid) return;
+      if (selectedCid === UI_KB_ROOT_ID) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 3;
+        td.style.cssText = "color:var(--on-surface-variant); font-size:0.85rem";
+        td.textContent = "Файлы загружаются в выбранный раздел дерева, не в корень.";
+        tr.appendChild(td);
+        tb.appendChild(tr);
+        return;
+      }
       try {
         const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { headers: headers(false) });
         if (!r.ok) throw new Error(await r.text());
@@ -5407,7 +5562,7 @@
       errBox($("docErr"), "");
       const fin = $("fileIn");
       const f = fin && fin.files[0];
-      if (!f || !selectedCid) return;
+      if (!f || !selectedCid || selectedCid === UI_KB_ROOT_ID) return;
       setUploadLoading(true);
       const fd = new FormData();
       fd.append("file", f);
@@ -5439,7 +5594,7 @@
     });
 
     $("btnDelCol").onclick = async () => {
-      if (!selectedCid) return;
+      if (!selectedCid || selectedCid === UI_KB_ROOT_ID) return;
       const ok = await showConfirmDialog({
         message: "Удалить раздел и все вложенные подразделы, документы и индекс Chroma?",
         confirmLabel: "Удалить",
@@ -5473,7 +5628,8 @@
         if ($("shareSectionOut")) $("shareSectionOut").textContent = "";
         errBox($("colErr"), "");
         try {
-          const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/share"), { method: "POST", headers: headers(false) });
+          const shareCid = selectedCid === UI_KB_ROOT_ID ? SHARE_TENANT_KB_ROOT_ID : selectedCid;
+          const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(shareCid) + "/share"), { method: "POST", headers: headers(false) });
           const t = await r.text();
           if (!r.ok) throw new Error(formatHttpError(r.status, t));
           const data = JSON.parse(t);

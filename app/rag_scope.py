@@ -10,6 +10,9 @@ from typing import Any
 RAG_ALL_PLACEHOLDER_ID = "__knowledge_rag_all__"
 RAG_ALL_PLACEHOLDER_NAME = "Все разделы"
 
+# Share/mount: весь каталог tenant (все корневые разделы и вложенность), не UUID строки БД.
+SHARE_TENANT_KB_ROOT_ID = "__share_tenant_kb_root__"
+
 
 def parse_rag_scope_json(raw: str | None) -> dict[str, Any] | None:
     if not raw or not str(raw).strip():

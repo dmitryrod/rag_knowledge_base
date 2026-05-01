@@ -14,7 +14,7 @@ if (-not (Test-Path (Join-Path $Root "pyproject.toml"))) {
 }
 Set-Location $Root
 
-$Wheels = Join-Path $Root "local-dist" "wheels"
+$Wheels = Join-Path (Join-Path $Root "local-dist") "wheels"
 function Install-FromLocalWheels {
     if (-not (Test-Path $Wheels)) {
         Write-Error "No directory $Wheels — run: .\scripts\refresh-local-dist.ps1"

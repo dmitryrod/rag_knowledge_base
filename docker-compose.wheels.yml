@@ -1,8 +1,10 @@
-# Подключает Dockerfile.wheels: pip только из local-dist/wheels (без PyPI внутри build).
-# Предусловия:
-# 1) .\scripts\refresh-local-dist.ps1
-# 2) если Docker Hub недоступен: сначала docker load -i local-dist\docker\python-3.12-slim-bookworm.tar
-#    (создаётся refresh-local-dist.ps1 -IncludeDockerBase)
+# Offline-сборка: только local-dist/wheels, без PyPI внутри build.
+# Предусловие: заполнить wheels (один из вариантов):
+#   - .\scripts\refresh-wheels-in-linux-container.ps1 (рекомендуется на Windows: linux-колёса на диск хоста), или
+#   - .\scripts\refresh-local-dist.ps1 (колёса с хоста Windows — не все подходят под linux-образ), или
+#   машина с Linux / CI с заполненным local-dist/wheels.
+# Если Docker Hub недоступен: docker load -i local-dist\docker\python-3.12-slim.tar
+#   (создаётся refresh-local-dist.ps1 -IncludeDockerBase)
 #
 # Сборка: docker compose -f docker-compose.yml -f docker-compose.wheels.yml build
 # Запуск:  docker compose -f docker-compose.yml -f docker-compose.wheels.yml up
@@ -10,5 +12,9 @@ services:
   knowledge-api:
     build:
       context: .
-      dockerfile: Dockerfile.wheels
-    image: rag_knowledge_base-knowledge-api:local
+      dockerfile: Dockerfile
+      # При объединении compose-файлов не полагаться только на базовый файл: wheelhouse нужен для offline.
+      additional_contexts:
+        wheelhouse: ./local-dist/wheels
+      args:
+        WHEEL_MODE: offline

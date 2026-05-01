@@ -1,17 +1,17 @@
 # Скачивает в local-dist/ артефакты для работы с сетью/без (обновляй при удачном доступе к PyPI / Docker Hub):
 #   local-dist/wheels/ — pip, setuptools, wheel, зависимости и пакет из pyproject (перезапись = актуальные версии)
 #   local-dist/docker/  — опционально: tar базового образа (см. -IncludeDockerBase) для docker load без pull
-# Использование: .\scripts\refresh-local-dist.ps1 [-IncludeDockerBase] [-BaseImage "python:3.12-slim-bookworm"]
+# Использование: .\scripts\refresh-local-dist.ps1 [-IncludeDockerBase] [-BaseImage "python:3.12-slim"]
 param(
     [switch]$IncludeDockerBase,
-    [string]$BaseImage = "python:3.12-slim-bookworm"
+    [string]$BaseImage = "python:3.12-slim"
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-$WheelsDir = Join-Path $Root "local-dist" "wheels"
-$DockerDir = Join-Path $Root "local-dist" "docker"
+$WheelsDir = Join-Path (Join-Path $Root "local-dist") "wheels"
+$DockerDir = Join-Path (Join-Path $Root "local-dist") "docker"
 New-Item -ItemType Directory -Force -Path $WheelsDir, $DockerDir | Out-Null
 
 if (-not (Test-Path (Join-Path $Root "pyproject.toml"))) {
@@ -39,5 +39,5 @@ if ($IncludeDockerBase) {
 }
 
 Write-Host "Установка из кэша: .\\scripts\\pip-install-editable.ps1 -UseLocalDist" -ForegroundColor Cyan
-Write-Host "Docker без PyPI внутри build: sm. docker-compose.wheels.yml (нужен local-dist/wheels + при необходимости docker load)" -ForegroundColor Cyan
+Write-Host "Docker offline-образ: .\scripts\refresh-wheels-in-linux-container.ps1 затем docker compose build --build-arg WHEEL_MODE=offline" -ForegroundColor Cyan
 exit 0

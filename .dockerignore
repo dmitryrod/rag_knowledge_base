@@ -12,4 +12,9 @@ htmlcov
 .env.local
 dist/
 build/
-local-dist/
+# local-dist: не тащить tar и колёса в tarball контекста; сам каталог local-dist/wheels — часть контекста
+# (обязательно для RUN --mount=type=bind,source=local-dist/wheels — иначе BuildKit: path not found).
+local-dist/docker/**
+local-dist/wheels/*.whl
+local-dist/wheels/*.gz
+local-dist/wheels/*.zip

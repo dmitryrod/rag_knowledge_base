@@ -14,6 +14,10 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-local-dist/
+# local-dist: колёса и tar не в git, но каталог wheels нужен для Docker bind mount
+local-dist/*
+!local-dist/wheels/
+local-dist/wheels/*
+!local-dist/wheels/.gitkeep
 app/docs/
 presentations/

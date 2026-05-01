@@ -39,7 +39,7 @@ def expand_local_collection_ids_to_chroma_targets(
         if mnt_tid and mnt_root:
             issuer_tid = str(mnt_tid)
             idb = deps.get_db_for_tenant(settings, issuer_tid)
-            for uc in idb.collection_subtree_postorder(str(mnt_root)):
+            for uc in idb.collection_ids_for_share_root(str(mnt_root)):
                 add_pair(issuer_tid, uc)
         else:
             for lc in local_db.collection_subtree_postorder(cid):
@@ -80,7 +80,7 @@ def list_documents_maybe_mount(
         idb = deps.get_db_for_tenant(settings, str(mnt_tid))
         combined: list[dict[str, Any]] = []
         root_s = str(mroot)
-        for subcid in idb.collection_subtree_postorder(root_s):
+        for subcid in idb.collection_ids_for_share_root(root_s):
             for d in idb.list_documents(subcid):
                 combined.append(dict(d))
         return combined

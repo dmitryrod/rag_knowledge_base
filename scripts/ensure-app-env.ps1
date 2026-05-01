@@ -1,6 +1,8 @@
 # Перед `docker compose up`: копирует app/.env.example -> app/.env, если .env нет
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
+$wheelsDir = Join-Path $Root "local-dist\wheels"
+New-Item -ItemType Directory -Force -Path $wheelsDir | Out-Null
 $envExample = Join-Path $Root "app\.env.example"
 $envTarget = Join-Path $Root "app\.env"
 if (Test-Path $envTarget) {

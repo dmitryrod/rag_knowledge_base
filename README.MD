@@ -20,12 +20,40 @@
 
 ## Быстрый старт через Docker
 
-Требования: Docker Desktop / Docker Engine с `docker compose`.
+Требования: Docker Desktop / Docker Engine с `docker compose` и включённым **BuildKit** (в Desktop обычно по умолчанию; для CLI: `set DOCKER_BUILDKIT=1`).
+
+**Перед первой сборкой:** в репозитории есть пустой каталог `local-dist/wheels/` (`.gitkeep`). Если удалил его — создай снова:
+
+```powershell
+New-Item -ItemType Directory -Force -Path local-dist\wheels | Out-Null
+```
+
+В **`.dockerignore`** для `local-dist/wheels` исключены только тяжёлые артефакты (`*.whl`, архивы), а не сам каталог — иначе BuildKit не находит путь для `RUN --mount=type=bind,source=local-dist/wheels,...`.
+
+Дальше варианты:
+
+| Команда | Что делает |
+|--------|------------|
+| `docker compose build` | Режим **online**: ставит зависимости **из PyPI** прямо в слой образа. Каталог **`local-dist\wheels` при этом не заполняется** (на Docker Desktop для Windows запись в bind во время `docker build` в VM часто **не** появляется на диске `D:\` — это нормально). Чтобы заполнить колёса на хосте под offline, см. строку ниже. |
+| `.\scripts\refresh-wheels-in-linux-container.ps1` | Запускает `pip wheel` в контейнере с монтированием `local-dist\wheels` (**надёжно на Windows**); после этого можно `docker compose build --build-arg WHEEL_MODE=offline`. |
+| `docker compose build --build-arg WHEEL_MODE=offline` | Режим **offline**: PyPI в build не использует; ставит только из уже заполненного `local-dist\wheels` (сеть для pip не нужна). |
+| `docker compose -f docker-compose.yml -f docker-compose.wheels.yml build` | То же, что offline, через переопределение compose (удобно без `--build-arg`). |
+
+**Базовый образ (`FROM python:…`) и Docker Hub:** строка `FROM` всегда требует локального образа или доступа к Docker Hub. Если сборка падает на `failed to resolve source metadata` / `HTTP CONNECT` / `forcibly closed` — прокси или сеть режут доступ к Hub. Сделай одно из:
+
+1. Один раз при нормальной сети: `docker pull python:3.12-slim`, затем снова `docker compose up --build` (образ уже локальный, Hub не звонит).
+2. Или сохрани образ как tar на другой машине и подгрузи: `.\scripts\refresh-local-dist.ps1 -IncludeDockerBase`, положи `local-dist\docker\python-3.12-slim.tar` сюда, затем **`.\scripts\docker-ensure-base-image.ps1`** — он сделает `docker load`, если образа ещё нет.
+3. Подкрути прокси/VPN/DNS в **Docker Desktop** (Settings → Resources / Proxies), чтобы `registry-1.docker.io` проходил так же, как браузер.
+4. В `docker-compose.yml` для сервиса задано **`pull: false`**: при сборке Docker не делает повторный `pull` базы с Hub. Нужен **уже загруженный** тег **`python:3.12-slim`** (как в `FROM` Dockerfile; смотри `docker images`). Тег `python:3.12-slim-bookworm` — другой и локальный `python:3.12-slim` его не подставит. Если образа нет — сначала п.1 или п.2; иначе сборка всё равно обратится к Hub.
+
+Запуск после сборки:
 
 ```powershell
 .\scripts\ensure-app-env.ps1
 docker compose up --build
 ```
+
+Опционально **заполнить `local-dist\wheels`** (linux-колёса, для offline-сборки образа или для копирования tar): `.\scripts\refresh-wheels-in-linux-container.ps1`. Обновить кэш через хостовый Python (часто win-колёса): `.\scripts\refresh-local-dist.ps1`.
 
 После старта:
 
@@ -66,7 +94,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `CHUNK_SIZE`, `CHUNK_OVERLAP`, `MAX_UPLOAD_MB`, `RETRIEVAL_TOP_K` — ingest/RAG лимиты.
 - `APP_CORS_ORIGINS`, `APP_PUBLIC_BASE_URL`, `APP_ALLOW_CLIENT_DEBUG` — браузерный UI, CORS и debug.
 
-Не коммить реальные `.env`, ключи и локальные данные. `app/.env`, корневой `.env`, `app/data/` и `local-dist/` исключены из git.
+Не коммить реальные `.env`, ключи и локальные данные. `app/.env`, корневой `.env`, `app/data/` в git не кладём; содержимое `local-dist/` (колёса, tar) тоже нет, но сам каталог `local-dist/wheels/` в дереве есть за счёт `.gitkeep`.
 
 ## Команды проверки
 
@@ -131,9 +159,9 @@ app/
   tests/            # pytest
   *.py              # backend, ingest, RAG, auth, storage
 scripts/            # PowerShell-скрипты запуска/установки/offline-кэша
-Dockerfile          # основной Docker image
-Dockerfile.wheels   # сборка из local-dist/wheels без PyPI
-docker-compose.yml  # compose-запуск knowledge-api
+Dockerfile          # образ приложения; режим колёс: build-arg WHEEL_MODE=online|offline
+docker-compose.yml  # compose-запуск knowledge-api (сборка по умолчанию online)
+docker-compose.wheels.yml  # override: сборка offline только из local-dist/wheels
 pyproject.toml      # зависимости, package metadata, entrypoint knowledge-api
 ```
 

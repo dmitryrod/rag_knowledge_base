@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any, Generator
 from uuid import uuid4
 
-from app.rag_scope import RAG_ALL_PLACEHOLDER_ID, RAG_ALL_PLACEHOLDER_NAME
+from app.rag_scope import (
+    RAG_ALL_PLACEHOLDER_ID,
+    RAG_ALL_PLACEHOLDER_NAME,
+    SHARE_TENANT_KB_ROOT_ID,
+)
 
 # Патч коллекции: «поле parent_id не менять» (отличается от `None` = корень).
 _COLLECTION_PATCH_PARENT_UNSET = object()
@@ -268,6 +272,26 @@ class MetadataDB:
             return out
 
         return walk(root_id)
+
+    def collection_ids_for_share_root(self, issuer_root_collection_id: str) -> list[str]:
+        """Идентификаторы коллекций источника, покрываемые share: одно поддерево или все корни tenant."""
+        root = str(issuer_root_collection_id).strip()
+        if root == SHARE_TENANT_KB_ROOT_ID:
+            pairs: list[tuple[str, str]] = []
+            for r in self.list_collections():
+                cid = str(r["id"])
+                if cid == RAG_ALL_PLACEHOLDER_ID:
+                    continue
+                if r.get("parent_id") is not None:
+                    continue
+                name = str(r.get("name") or "")
+                pairs.append((name.lower(), cid))
+            pairs.sort(key=lambda x: (x[0], x[1]))
+            out: list[str] = []
+            for _, rid in pairs:
+                out.extend(self.collection_subtree_postorder(rid))
+            return out
+        return self.collection_subtree_postorder(root)
 
     def update_collection(
         self,

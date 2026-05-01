@@ -2,14 +2,14 @@
 # Без образа и без tar сборка идёт в Docker Hub (часто: context deadline exceeded).
 # Запускай ПЕРЕД docker compose up --build, если Hub недоступен.
 param(
-    [string]$Image = "python:3.12-slim-bookworm",
+    [string]$Image = "python:3.12-slim",
     [string]$TarPath = ""
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 if (-not $TarPath) {
     $file = ($Image -replace "[:/]", "-") + ".tar"
-    $TarPath = Join-Path $Root "local-dist" "docker" $file
+    $TarPath = Join-Path (Join-Path (Join-Path $Root "local-dist") "docker") $file
 }
 
 $null = & docker image inspect $Image 2>&1

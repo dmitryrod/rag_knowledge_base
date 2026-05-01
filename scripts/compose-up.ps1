@@ -2,7 +2,7 @@
 # Остаток аргументов уходит в compose, например: .\scripts\compose-up.ps1 -d
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-& (Join-Path $Root "scripts" "docker-ensure-base-image.ps1")
+& (Join-Path (Join-Path $Root "scripts") "docker-ensure-base-image.ps1")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Set-Location $Root
 $tail = $args

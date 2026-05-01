@@ -9,6 +9,8 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+from app.rag_scope import SHARE_TENANT_KB_ROOT_ID
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
@@ -419,6 +421,58 @@ def test_member_can_mount_collection_with_share_token(client_rbac: TestClient) -
     body = m.json()
     assert body.get("mount_issuer_root_collection_id") == src_id
     assert body.get("mount_issuer_tenant_id")
+
+
+def test_mount_entire_tenant_tree_via_share_root(client_rbac: TestClient) -> None:
+    """Ключ на «корень хранилища» монтирует все корневые разделы и вложенность."""
+    a = client_rbac.post(
+        "/v1/collections",
+        json={"name": "tree-root-a"},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert a.status_code == 200
+    b = client_rbac.post(
+        "/v1/collections",
+        json={"name": "tree-root-b"},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert b.status_code == 200
+    id_a = a.json()["id"]
+    id_b = b.json()["id"]
+    client_rbac.post(
+        f"/v1/collections/{id_a}/documents",
+        files={"file": ("a.txt", io.BytesIO(b"alpha"), "text/plain")},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    client_rbac.post(
+        f"/v1/collections/{id_b}/documents",
+        files={"file": ("b.txt", io.BytesIO(b"beta"), "text/plain")},
+        headers={"X-API-Key": "adm-secret"},
+    )
+    shr = client_rbac.post(
+        f"/v1/collections/{SHARE_TENANT_KB_ROOT_ID}/share",
+        headers={"X-API-Key": "adm-secret"},
+    )
+    assert shr.status_code == 200
+    token = shr.json()["share_token"]
+    m = client_rbac.post(
+        "/v1/collections",
+        json={"mount_share_token": token},
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert m.status_code == 200
+    body = m.json()
+    assert body.get("mount_issuer_root_collection_id") == SHARE_TENANT_KB_ROOT_ID
+    assert body.get("mount_issuer_tenant_id")
+    mount_id = body["id"]
+    docs = client_rbac.get(
+        f"/v1/collections/{mount_id}/documents",
+        headers={"X-API-Key": "mem-secret"},
+    )
+    assert docs.status_code == 200
+    names = {d.get("filename") for d in docs.json()}
+    assert "a.txt" in names
+    assert "b.txt" in names
 
 
 def test_member_cannot_mint_share_token(client_rbac: TestClient) -> None:

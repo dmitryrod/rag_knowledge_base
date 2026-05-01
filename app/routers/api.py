@@ -40,6 +40,7 @@ from app.rag_mount import (
 )
 from app.rag_scope import (
     RAG_ALL_PLACEHOLDER_ID,
+    SHARE_TENANT_KB_ROOT_ID,
     collection_ids_for_retrieval,
     expand_collection_ids_with_subtrees,
     normalize_id_list,
@@ -392,12 +393,27 @@ async def health(settings: Settings = Depends(get_settings)) -> dict[str, str | 
 @router.post("/collections/{collection_id}/share", dependencies=[Depends(require_admin), Depends(forbid_demo_writes)])
 async def mint_collection_share(
     collection_id: str,
-    settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
     """Секрет для монтирования дерева раздела в другом tenant (см. POST /collections с mount_share_token)."""
     if collection_id == RAG_ALL_PLACEHOLDER_ID:
         raise HTTPException(status_code=400, detail="Reserved system collection")
     db = deps.get_db()
+    if collection_id == SHARE_TENANT_KB_ROOT_ID:
+        if not db.collection_ids_for_share_root(SHARE_TENANT_KB_ROOT_ID):
+            raise HTTPException(
+                status_code=400,
+                detail="No sections at root to share",
+            )
+        token = secrets.token_urlsafe(48)
+        issuer_tenant = require_bound_tenant_id()
+        deps.get_registry().create_share_link(
+            issuer_tenant, SHARE_TENANT_KB_ROOT_ID, token
+        )
+        db.audit(
+            "collection.share",
+            f"id={SHARE_TENANT_KB_ROOT_ID!r} tenant-tree issuer_tenant={issuer_tenant}",
+        )
+        return {"share_token": token}
     row = db.get_collection(collection_id)
     if not row:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -424,8 +440,16 @@ async def create_collection(
             raise HTTPException(status_code=400, detail="Invalid or revoked share_token")
         _validate_writable_parent(db, body.parent_id)
         issuer_db = deps.get_db_for_tenant(settings, link.issuer_tenant_id)
-        if not issuer_db.get_collection(link.issuer_root_collection_id):
-            raise HTTPException(status_code=404, detail="Share source collection missing")
+        if link.issuer_root_collection_id != SHARE_TENANT_KB_ROOT_ID:
+            if not issuer_db.get_collection(link.issuer_root_collection_id):
+                raise HTTPException(
+                    status_code=404, detail="Share source collection missing"
+                )
+        elif not issuer_db.collection_ids_for_share_root(SHARE_TENANT_KB_ROOT_ID):
+            raise HTTPException(
+                status_code=404,
+                detail="Share source has no root sections",
+            )
         name = body.name.strip() if body.name.strip() else "Общий доступ"
         cid = db.create_mount_collection(
             name,
@@ -433,9 +457,14 @@ async def create_collection(
             mount_issuer_tenant_id=link.issuer_tenant_id,
             mount_issuer_root_collection_id=link.issuer_root_collection_id,
         )
+        root_note = (
+            "tenant-tree"
+            if link.issuer_root_collection_id == SHARE_TENANT_KB_ROOT_ID
+            else repr(link.issuer_root_collection_id)
+        )
         db.audit(
             "collection.create.mount",
-            f"id={cid} issuer_tenant={link.issuer_tenant_id} root={link.issuer_root_collection_id!r}",
+            f"id={cid} issuer_tenant={link.issuer_tenant_id} root={root_note}",
         )
         row = db.get_collection(cid)
         assert row
