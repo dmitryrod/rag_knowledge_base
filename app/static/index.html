@@ -364,6 +364,36 @@
       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--on-surface-variant); margin: 0 0 0.5rem 0; font-weight: 600;
     }
+    .settings-subnav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .settings-subnav-btn {
+      width: 100%;
+      text-align: left;
+      padding: 0.45rem 0.5rem;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--on-surface);
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .settings-subnav-btn:hover {
+      background: var(--surface-container);
+    }
+    .settings-subnav-btn.active {
+      background: var(--surface-bright);
+      border-color: var(--ghost-border);
+    }
+    .settings-subnav-btn:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
     .kb-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
     .kb-tree-node { margin-bottom: 1px; }
     .kb-tree-children { margin-left: 0.2rem; padding-left: 0.25rem; border-left: 1px solid var(--ghost-border); }
@@ -1771,6 +1801,11 @@
           </div>
         </div>
         <div class="sidebar-panel hidden" id="sidebar-settings-panel">
+          <p class="kb-side-title">Настройки</p>
+          <nav class="settings-subnav" role="tablist" aria-label="Разделы настроек">
+            <button type="button" role="tab" class="settings-subnav-btn active" id="btnSettingsSubGeneral" aria-selected="true">Основные</button>
+            <button type="button" role="tab" class="settings-subnav-btn hidden" id="btnSettingsSubUsers" aria-selected="false">Пользователи</button>
+          </nav>
         </div>
         <div class="sidebar-panel hidden" id="sidebar-tests-panel">
           <p class="sidebar-hint" style="flex-shrink:0;margin:0 0 0.35rem 0"><strong>★ Favorite</strong></p>
@@ -1947,6 +1982,7 @@
 
         <div id="view-settings" class="view">
           <div class="view-inner">
+            <div id="settingsPaneGeneral">
             <div class="card hidden" id="keyCard">
               <h2>API-ключ</h2>
               <label class="field" for="apiKey">X-API-Key</label>
@@ -1961,20 +1997,6 @@
             <div class="card">
               <h2>Health</h2>
               <p class="status mono" id="healthOut">—</p>
-            </div>
-            <div class="card hidden" id="userAdminCard">
-              <h2>Пользователи</h2>
-              <p style="font-size:0.875rem;color:var(--on-surface-variant);margin:0 0 0.5rem 0">
-                Новый пользователь по умолчанию получает своё хранилище. Опционально укажите UUID существующего tenant — общая база документов, чаты остаются персональными.
-              </p>
-              <div class="row" style="flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;align-items:flex-end">
-                <div style="flex:1;min-width:140px"><label class="field" for="newUserLogin">Логин</label><input type="text" id="newUserLogin" autocomplete="off" /></div>
-                <div style="flex:1;min-width:140px"><label class="field" for="newUserPass">Пароль</label><input type="password" id="newUserPass" autocomplete="new-password" /></div>
-                <div style="flex:1;min-width:200px"><label class="field" for="newUserWorkspaceTenant">Workspace tenant UUID (опционально)</label><input type="text" id="newUserWorkspaceTenant" placeholder="общий tenants/…" autocomplete="off" /></div>
-                <button type="button" class="btn" id="btnCreateUser">Создать</button>
-              </div>
-              <p id="userAdminErr" class="status err hidden"></p>
-              <table id="userAdminTbl" style="width:100%"><thead><tr><th>Логин</th><th>Tenant</th><th></th></tr></thead><tbody></tbody></table>
             </div>
             <div class="card">
               <h2>Отладка</h2>
@@ -2007,6 +2029,23 @@
             <footer class="doc-foot">
               <a href="/docs">OpenAPI</a> · <a href="/redoc">RAG api</a>
             </footer>
+            </div>
+            <div id="settingsPaneUsers" class="hidden">
+            <div class="card hidden" id="userAdminCard">
+              <h2>Пользователи</h2>
+              <p style="font-size:0.875rem;color:var(--on-surface-variant);margin:0 0 0.5rem 0">
+                Новый пользователь по умолчанию получает своё хранилище. Опционально укажите UUID существующего tenant — общая база документов, чаты остаются персональными.
+              </p>
+              <div class="row" style="flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;align-items:flex-end">
+                <div style="flex:1;min-width:140px"><label class="field" for="newUserLogin">Логин</label><input type="text" id="newUserLogin" autocomplete="off" /></div>
+                <div style="flex:1;min-width:140px"><label class="field" for="newUserPass">Пароль</label><input type="password" id="newUserPass" autocomplete="new-password" /></div>
+                <div style="flex:1;min-width:200px"><label class="field" for="newUserWorkspaceTenant">Workspace tenant UUID (опционально)</label><input type="text" id="newUserWorkspaceTenant" placeholder="общий tenants/…" autocomplete="off" /></div>
+                <button type="button" class="btn" id="btnCreateUser">Создать</button>
+              </div>
+              <p id="userAdminErr" class="status err hidden"></p>
+              <table id="userAdminTbl" style="width:100%"><thead><tr><th>Логин</th><th>Tenant</th><th></th></tr></thead><tbody></tbody></table>
+            </div>
+            </div>
           </div>
         </div>
 
@@ -2295,6 +2334,7 @@
     let sessionLoginConfigured = false;
     const collections = [];
     let currentView = "chat";
+    let currentSettingsSubView = "general";
     const knowledgeSelStore = "knowledge_ui_selection";
     let knowledgeTreeRoots = [];
     let knowledgeSelection = null;
@@ -3304,6 +3344,10 @@
         if (!r.ok) throw new Error(await r.text());
         knowledgeTreeRoots = await r.json();
         renderKbTree();
+        // Синхронизируем RAG scope UI с загруженным деревом
+        pruneRagIdsToExisting();
+        buildRagScopeUi();
+        onRagScopeChanged();
       } catch (e) {
         setKbTreeStatusText("");
         errBox($("kbTreeErr"), String(e));
@@ -3767,11 +3811,15 @@
       if (!card) return;
       const me = window.__AUTH_ME;
       const err = $("userAdminErr");
+      const navUsers = $("btnSettingsSubUsers");
       if (err) { err.textContent = ""; err.classList.add("hidden"); }
       if (!me || !me.can_manage_users) {
         card.classList.add("hidden");
+        if (navUsers) navUsers.classList.add("hidden");
+        if (currentSettingsSubView === "users") setSettingsSubView("general");
         return;
       }
+      if (navUsers) navUsers.classList.remove("hidden");
       card.classList.remove("hidden");
       const tbody = $("userAdminTbl") && $("userAdminTbl").querySelector("tbody");
       if (!tbody) return;
@@ -3805,6 +3853,7 @@
       } catch (e) {
         if (err) { err.textContent = String(e); err.classList.remove("hidden"); }
       }
+      setSettingsSubNavActive(currentSettingsSubView);
     }
     function applyKeyFromStorage() {
       const el = $("apiKey");
@@ -3916,6 +3965,43 @@
       if ($("sidebar-tests-panel")) $("sidebar-tests-panel").classList.toggle("hidden", name !== "tests");
     }
 
+    function setSettingsSubNavActive(pane) {
+      const btnG = $("btnSettingsSubGeneral");
+      const btnU = $("btnSettingsSubUsers");
+      if (btnG) {
+        btnG.classList.toggle("active", pane === "general");
+        btnG.setAttribute("aria-selected", pane === "general" ? "true" : "false");
+      }
+      if (btnU) {
+        const usersAvailable = !btnU.classList.contains("hidden");
+        if (usersAvailable) {
+          btnU.classList.toggle("active", pane === "users");
+          btnU.setAttribute("aria-selected", pane === "users" ? "true" : "false");
+        } else {
+          btnU.classList.remove("active");
+          btnU.setAttribute("aria-selected", "false");
+        }
+      }
+    }
+
+    function setSettingsSubView(pane) {
+      const gen = $("settingsPaneGeneral");
+      const usr = $("settingsPaneUsers");
+      const navU = $("btnSettingsSubUsers");
+      if (!gen || !usr) return;
+      if (pane === "users" && navU && navU.classList.contains("hidden")) pane = "general";
+      currentSettingsSubView = pane === "users" ? "users" : "general";
+      if (currentSettingsSubView === "users") {
+        gen.classList.add("hidden");
+        usr.classList.remove("hidden");
+        loadUsersAdmin();
+      } else {
+        usr.classList.add("hidden");
+        gen.classList.remove("hidden");
+      }
+      setSettingsSubNavActive(currentSettingsSubView);
+    }
+
     function setView(name) {
       currentView = name;
       document.querySelectorAll(".tab").forEach((b) => {
@@ -3932,12 +4018,15 @@
         loadKnowledgeStats();
       }
       if (name === "tests") loadTestFavorites();
+      if (name === "settings") setSettingsSubView("general");
     }
 
     document.querySelectorAll(".tab").forEach((btn) => {
       btn.onclick = () => setView(btn.getAttribute("data-view"));
     });
     $("btnSettings").onclick = () => setView("settings");
+    if ($("btnSettingsSubGeneral")) $("btnSettingsSubGeneral").onclick = () => setSettingsSubView("general");
+    if ($("btnSettingsSubUsers")) $("btnSettingsSubUsers").onclick = () => setSettingsSubView("users");
 
     const testProfileStoreA = "knowledge_test_profile_a";
     const testProfileStoreB = "knowledge_test_profile_b";
@@ -5139,9 +5228,44 @@
       }
     }
 
+    // Собирает все ID разделов из дерева knowledgeTreeRoots (включая вложенные)
+    function collectAllSectionIdsFromTree() {
+      const ids = [];
+      function walk(nodes) {
+        for (const n of nodes || []) {
+          ids.push(n.id);
+          walk(n.children);
+        }
+      }
+      walk(knowledgeTreeRoots);
+      return ids;
+    }
+    // Проверяет существование ID в дереве knowledgeTreeRoots
+    function sectionIdExistsInTree(id) {
+      function walk(nodes) {
+        for (const n of nodes || []) {
+          if (n.id === id) return true;
+          if (walk(n.children)) return true;
+        }
+        return false;
+      }
+      return walk(knowledgeTreeRoots);
+    }
+    // Находит узел раздела в дереве по ID
+    function findSectionNodeInTree(id, nodes) {
+      const list = nodes || knowledgeTreeRoots;
+      for (const n of list) {
+        if (n.id === id) return n;
+        const f = findSectionNodeInTree(id, n.children || []);
+        if (f) return f;
+      }
+      return null;
+    }
+
     function getRagScopeObject() {
       if (ragScope.all) return { all: true };
-      const ids = (ragScope.ids || []).filter((id) => collections.some((c) => c.id === id));
+      // Используем дерево вместо flat collections
+      const ids = (ragScope.ids || []).filter((id) => sectionIdExistsInTree(id));
       if (!ids.length) return { all: true };
       return { ids: [...ids].sort() };
     }
@@ -5164,7 +5288,8 @@
         }
       } catch (e) { /* ignore */ }
       const legacy = localStorage.getItem(cidStore);
-      if (legacy && collections.some((c) => c.id === legacy)) {
+      // Используем дерево вместо flat collections для backward compatibility
+      if (legacy && sectionIdExistsInTree(legacy)) {
         ragScope = { all: false, ids: [legacy] };
       } else {
         ragScope = { all: true, ids: [] };
@@ -5174,7 +5299,8 @@
 
     function pruneRagIdsToExisting() {
       if (ragScope.all) return;
-      const ids = (ragScope.ids || []).filter((id) => collections.some((c) => c.id === id));
+      // Используем дерево вместо flat collections
+      const ids = (ragScope.ids || []).filter((id) => sectionIdExistsInTree(id));
       if (!ids.length) {
         ragScope = { all: true, ids: [] };
         localStorage.setItem(ragScopeStore, JSON.stringify({ all: true }));
@@ -5207,7 +5333,8 @@
       const dedup = [];
       const seen = new Set();
       for (const id of next) {
-        if (!collections.some((c) => c.id === id)) continue;
+        // Используем дерево вместо flat collections
+        if (!sectionIdExistsInTree(id)) continue;
         if (seen.has(id)) continue;
         seen.add(id);
         dedup.push(id);
@@ -5219,7 +5346,9 @@
     }
 
     function canUseChatRag() {
-      if (!collections.length) return false;
+      // Используем дерево вместо flat collections
+      const hasSections = knowledgeTreeRoots && knowledgeTreeRoots.length > 0;
+      if (!hasSections) return false;
       const o = getRagScopeObject();
       if (o.all) return true;
       return !!(o.ids && o.ids.length);
@@ -5232,11 +5361,39 @@
       loadThreads();
     }
 
+    // Рекурсивно строит дерево чекбоксов для RAG scope
+    function buildRagScopeTreeRecursive(nodes, container, depth) {
+      for (const n of nodes || []) {
+        const row = document.createElement("label");
+        row.style.paddingLeft = (depth * 16) + "px";
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.gap = "6px";
+        row.style.margin = "2px 0";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.dataset.cid = n.id;
+        if (!ragScope.all && (ragScope.ids || []).includes(n.id)) cb.checked = true;
+        const span = document.createElement("span");
+        span.textContent = n.name || "(без названия)";
+        span.style.fontSize = "0.9rem";
+        row.appendChild(cb);
+        row.appendChild(span);
+        container.appendChild(row);
+        // Рекурсивно обрабатываем детей
+        if (n.children && n.children.length) {
+          buildRagScopeTreeRecursive(n.children, container, depth + 1);
+        }
+      }
+    }
+
     function buildRagScopeUi() {
       const mount = $("ragScopeMount");
       if (!mount) return;
       mount.innerHTML = "";
-      if (!collections.length) return;
+      // Используем дерево вместо flat collections
+      const hasTree = knowledgeTreeRoots && knowledgeTreeRoots.length > 0;
+      if (!hasTree) return;
       const allRow = document.createElement("div");
       allRow.className = "rag-all-row";
       const allCb = document.createElement("input");
@@ -5252,25 +5409,16 @@
       const list = document.createElement("div");
       list.className = "rag-col-list" + (ragScope.all ? " disabled" : "");
       list.id = "ragColList";
-      for (const c of collections) {
-        const row = document.createElement("label");
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.dataset.cid = c.id;
-        if (!ragScope.all && (ragScope.ids || []).includes(c.id)) cb.checked = true;
-        const span = document.createElement("span");
-        span.textContent = c.name + " (" + c.id.slice(0, 8) + "…)";
-        row.appendChild(cb);
-        row.appendChild(span);
-        list.appendChild(row);
-      }
+      // Строим дерево из knowledgeTreeRoots
+      buildRagScopeTreeRecursive(knowledgeTreeRoots, list, 0);
       mount.appendChild(list);
       allCb.onchange = () => {
         if (allCb.checked) {
           ragScope = { all: true, ids: [] };
         } else {
-          let ids = (ragScope.ids || []).filter((id) => collections.some((c) => c.id === id));
-          if (!ids.length && collections[0]) ids = [collections[0].id];
+          // При снятии "Все разделы" выбираем первый корневой раздел
+          let ids = (ragScope.ids || []).filter((id) => sectionIdExistsInTree(id));
+          if (!ids.length && knowledgeTreeRoots[0]) ids = [knowledgeTreeRoots[0].id];
           ragScope = { all: false, ids };
         }
         saveRagScope();

@@ -63,13 +63,18 @@ def _print_open_urls() -> None:
     lines = [
         "",
         f"  Knowledge API{hint}",
-        f"  → Веб-админка: {base}/",
-        f"  → Swagger: {base}/docs",
-        f"  → ReDoc:   {base}/redoc",
-        f"  → Health:  {base}/v1/health",
+        f"  -> Веб-админка: {base}/",
+        f"  -> Swagger: {base}/docs",
+        f"  -> ReDoc:   {base}/redoc",
+        f"  -> Health:  {base}/v1/health",
         "",
     ]
-    print("\n".join(lines), flush=True)
+    try:
+        print("\n".join(lines), flush=True)
+    except UnicodeEncodeError:
+        # Fallback для Windows с кодировкой cp1251
+        print("Knowledge API running", flush=True)
+        print(f"  URL: {base}/", flush=True)
 
 
 @asynccontextmanager
