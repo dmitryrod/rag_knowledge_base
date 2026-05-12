@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+
 from app.auth_dep import Principal
 from app.config import Settings
 from app.registry_db import RegistryDB
 from app.tenancy import TENANT_ENV_DEMO
 
+_log = logging.getLogger(__name__)
+
 
 def resolve_demo_storage_tenant_id(settings: Settings, registry: RegistryDB) -> str:
     """Приоритет: DEMO_WORKSPACE_TENANT_ID → DEMO_WORKSPACE_SHARE_TOKEN → собственный env_demo.
 
-    Raises:
-        ValueError: задан DEMO_WORKSPACE_SHARE_TOKEN, но токен не найден среди активных share_links.
+    Если ``DEMO_WORKSPACE_SHARE_TOKEN`` задан, но не найден в registry (устарел, другая БД),
+    токен игнорируется и используется ``env_demo``, чтобы приложение поднималось при деплое.
     """
     raw_tid = (settings.demo_workspace_tenant_id or "").strip()
     if raw_tid:
@@ -21,11 +25,12 @@ def resolve_demo_storage_tenant_id(settings: Settings, registry: RegistryDB) -> 
     if token:
         link = registry.resolve_share_token(token)
         if link is None:
-            msg = (
-                "DEMO_WORKSPACE_SHARE_TOKEN не совпадает ни с одной активной ссылкой "
-                "в registry (или ссылка отозвана)"
+            _log.warning(
+                "DEMO_WORKSPACE_SHARE_TOKEN не найден в registry (истёк или другой registry.db); "
+                "используется tenant %s. Уберите токен из .env или выставьте DEMO_WORKSPACE_TENANT_ID.",
+                TENANT_ENV_DEMO,
             )
-            raise ValueError(msg)
+            return TENANT_ENV_DEMO
         return link.issuer_tenant_id
     return TENANT_ENV_DEMO
 

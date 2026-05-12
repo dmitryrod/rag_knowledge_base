@@ -78,7 +78,9 @@ def test_resolve_demo_share_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert resolve_demo_storage_tenant_id(settings, reg) == "issuer-tid-xyz"
 
 
-def test_resolve_demo_invalid_share_token_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_resolve_demo_invalid_share_token_falls_back_to_env_demo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     monkeypatch.setenv("KNOWLEDGE_TESTS_NO_DOTENV", "1")
     from importlib import reload
 
@@ -88,13 +90,15 @@ def test_resolve_demo_invalid_share_token_raises(monkeypatch: pytest.MonkeyPatch
     from app.config import Settings
     from app.demo_workspace import resolve_demo_storage_tenant_id
     from app.registry_db import RegistryDB
+    from app.tenancy import TENANT_ENV_DEMO
 
     monkeypatch.setenv("DEMO_WORKSPACE_SHARE_TOKEN", "wrong")
     reload(app.config)
     settings = Settings()
     reg = RegistryDB(tmp_path / "reg.db")
-    with pytest.raises(ValueError, match="DEMO_WORKSPACE_SHARE_TOKEN"):
-        resolve_demo_storage_tenant_id(settings, reg)
+    with caplog.at_level("WARNING"):
+        assert resolve_demo_storage_tenant_id(settings, reg) == TENANT_ENV_DEMO
+    assert "DEMO_WORKSPACE_SHARE_TOKEN" in caplog.text
 
 
 def test_demo_without_shadow_sees_empty_collections(client_demo: TestClient) -> None:
