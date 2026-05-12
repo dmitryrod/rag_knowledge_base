@@ -148,6 +148,7 @@ def run_rag_test(
     profile: RagRuntimeProfile,
     *,
     debug: bool = False,
+    llm_rate_subject: str | None = None,
 ) -> dict[str, Any]:
     """Run one test retrieval + optional LLM; returns answer, citations, chunks, metrics."""
     t0 = time.perf_counter()
@@ -281,6 +282,7 @@ def run_rag_test(
                 response_format=response_fmt,
                 provider=profile.provider,
                 timeout=profile.timeout_seconds,
+                llm_rate_subject=llm_rate_subject,
             )
         except Exception:
             _log.exception("run_rag_test: LLM call failed")

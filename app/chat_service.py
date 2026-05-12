@@ -285,6 +285,7 @@ def run_chat(
     debug: bool = False,
     system_prompt_override: str | None = None,
     distance_threshold: float | None = None,
+    llm_rate_subject: str | None = None,
 ) -> dict[str, Any]:
     use_cross = bool(chroma_targets)
     if use_cross:
@@ -422,7 +423,10 @@ def run_chat(
     if debug:
         _log.info("run_chat: calling Polza model=%s", settings.polza_chat_model)
     try:
-        raw = llm_mod.chat_completion(settings, messages)
+        try:
+            raw = llm_mod.chat_completion(settings, messages, llm_rate_subject=llm_rate_subject)
+        except TypeError:
+            raw = llm_mod.chat_completion(settings, messages)
     except Exception:
         _log.exception("run_chat: llm.chat_completion failed")
         raise

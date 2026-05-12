@@ -22,3 +22,4 @@ local-dist/wheels/*
 !local-dist/wheels/.gitkeep
 app/docs/
 presentations/
+.github/

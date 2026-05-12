@@ -278,3 +278,8 @@ def is_user_panel_admin(p: Principal) -> bool:
 def require_users_panel(principal: Annotated[Principal, Depends(get_principal)]) -> None:
     if not is_user_panel_admin(principal):
         raise HTTPException(status_code=403, detail="Env admin only")
+
+
+def principal_llm_rate_key(principal: Principal) -> str:
+    """Ключ для LLM-throttle: один субъект (сессия / API key / dev)."""
+    return f"{principal.kind}|{principal.tenant_id}|{principal.subject}"

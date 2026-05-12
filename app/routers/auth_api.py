@@ -15,10 +15,15 @@ from app.auth_dep import (
 from app.config import Settings, get_settings, is_session_login_configured
 from app.demo_workspace import resolve_demo_storage_tenant_id
 from app.deps import get_registry
+from app.rate_limits import RateLimitExceeded, register_auth_login_attempt_or_raise
 from app.registry_db import RegistryDB
 from app.router_tenant_bind import bind_tenant_context
 
 router = APIRouter()
+
+
+def _auth_client_ip(request: Request) -> str:
+    return request.client.host if request.client and request.client.host else "unknown"
 
 
 class LoginBody(BaseModel):
@@ -31,6 +36,19 @@ def auth_login(request: Request, body: LoginBody) -> dict[str, bool | str]:
     settings = get_settings()
     if not is_session_login_configured(settings):
         raise HTTPException(status_code=503, detail="Session login is not configured")
+    try:
+        register_auth_login_attempt_or_raise(
+            _auth_client_ip(request),
+            float(settings.rate_limit_auth_login_window_sec),
+            int(settings.rate_limit_auth_login_max),
+        )
+    except RateLimitExceeded as e:
+        ra = max(1, int(e.retry_after_sec) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts; retry later.",
+            headers={"Retry-After": str(ra)},
+        ) from e
     registry = get_registry()
     p = try_login_with_password(body.username, body.password, settings, registry)
     if p is None:

@@ -27,6 +27,7 @@ from app.auth_dep import (
     get_auth,
     get_principal,
     is_auth_configured,
+    principal_llm_rate_key,
     require_admin,
     require_knowledge_writer,
     should_filter_chat_by_owner,
@@ -773,6 +774,16 @@ def _rethrow_chat_error(
     if isinstance(e, LlmUpstreamError):
         _log.warning("%s: LLM upstream: %s", log_label, e)
         raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+    from app.rate_limits import LlmRateLimitExceeded
+
+    if isinstance(e, LlmRateLimitExceeded):
+        _log.warning("%s: LLM rate limited (retry %.2fs)", log_label, e.retry_after_sec)
+        ra = max(1, int(e.retry_after_sec) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="LLM rate limit: слишком частые запросы к модели.",
+            headers={"Retry-After": str(ra)},
+        ) from e
     from app.chroma_user_errors import http_detail_for_chroma_or_embedding_network_error
 
     d = http_detail_for_chroma_or_embedding_network_error(e)
@@ -796,6 +807,7 @@ def _rethrow_chat_error(
 async def chat(
     collection_id: str,
     body: ChatIn,
+    principal: Principal = Depends(get_principal),
     settings: Settings = Depends(get_settings),
     client_debug: bool = Depends(is_client_debug),
 ) -> ChatOut:
@@ -817,6 +829,7 @@ async def chat(
             debug=client_debug,
             system_prompt_override=sys_prompt,
             distance_threshold=dist_thr,
+            llm_rate_subject=principal_llm_rate_key(principal),
         )
         if client_debug:
             _log.info(
@@ -878,6 +891,7 @@ def _format_export(answer: str, citations: list[dict], fmt: str) -> str:
 async def chat_export(
     collection_id: str,
     body: ChatIn,
+    principal: Principal = Depends(get_principal),
     settings: Settings = Depends(get_settings),
     client_debug: bool = Depends(is_client_debug),
     fmt: Annotated[
@@ -901,6 +915,7 @@ async def chat_export(
             collection_labels=col_labels,
             system_prompt_override=sys_prompt,
             distance_threshold=dist_thr,
+            llm_rate_subject=principal_llm_rate_key(principal),
         )
         db.audit(
             "chat.export",
@@ -1110,6 +1125,7 @@ async def chat_in_thread(
             debug=client_debug,
             system_prompt_override=sys_prompt,
             distance_threshold=dist_thr,
+            llm_rate_subject=principal_llm_rate_key(principal),
         )
         cites = list(out.get("citations") or [])
         db.insert_chat_message(

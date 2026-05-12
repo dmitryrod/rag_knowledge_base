@@ -19,6 +19,7 @@ from app.auth_dep import (
     Principal,
     get_auth,
     get_principal,
+    principal_llm_rate_key,
     require_admin,
     should_filter_chat_by_owner,
 )
@@ -29,6 +30,7 @@ from app.rag_profile import ProfileKind, RagRuntimeProfile, RagScopeIn
 from app.rag_runtime import MainChatRuntimeSnapshot, validate_main_chat_apply
 from app.chroma_user_errors import http_detail_for_chroma_or_embedding_network_error
 from app.rag_test_service import run_rag_test
+from app.rate_limits import LlmRateLimitExceeded
 
 _log = logging.getLogger(__name__)
 
@@ -344,6 +346,7 @@ async def export_test_profile(profile_id: str) -> JSONResponse:
 async def test_run(
     body: TestRunIn,
     settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
 ) -> dict[str, Any]:
     db = deps.get_db()
     prof: RagRuntimeProfile
@@ -367,7 +370,15 @@ async def test_run(
             scope,
             prof,
             debug=body.debug,
+            llm_rate_subject=principal_llm_rate_key(principal),
         )
+    except LlmRateLimitExceeded as e:
+        ra = max(1, int(e.retry_after_sec) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="LLM rate limit: слишком частые запросы к модели.",
+            headers={"Retry-After": str(ra)},
+        ) from e
     except Exception as e:
         _log.exception("rag test run failed")
         d = http_detail_for_chroma_or_embedding_network_error(e)
@@ -411,18 +422,41 @@ async def test_run(
 async def test_compare(
     body: TestCompareIn,
     settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
 ) -> dict[str, Any]:
     db = deps.get_db()
     scope = RagScopeIn.model_validate(body.scope)
     left = RagRuntimeProfile.model_validate(body.left_profile)
     right = RagRuntimeProfile.model_validate(body.right_profile)
+    subj = principal_llm_rate_key(principal)
     try:
         out_l = run_rag_test(
-            settings, deps.get_chroma(), db, body.question, scope, left, debug=body.debug
+            settings,
+            deps.get_chroma(),
+            db,
+            body.question,
+            scope,
+            left,
+            debug=body.debug,
+            llm_rate_subject=subj,
         )
         out_r = run_rag_test(
-            settings, deps.get_chroma(), db, body.question, scope, right, debug=body.debug
+            settings,
+            deps.get_chroma(),
+            db,
+            body.question,
+            scope,
+            right,
+            debug=body.debug,
+            llm_rate_subject=subj,
         )
+    except LlmRateLimitExceeded as e:
+        ra = max(1, int(e.retry_after_sec) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="LLM rate limit: слишком частые запросы к модели.",
+            headers={"Retry-After": str(ra)},
+        ) from e
     except Exception as e:
         _log.exception("rag test compare failed")
         d = http_detail_for_chroma_or_embedding_network_error(e)
@@ -755,6 +789,7 @@ async def benchmark_run_batch(
     set_id: str,
     body: dict[str, Any],
     settings: Settings = Depends(get_settings),
+    principal: Principal = Depends(get_principal),
 ) -> dict[str, Any]:
     """Run all questions in set with a single profile; store benchmark run and item rows."""
     db = deps.get_db()
@@ -780,19 +815,30 @@ async def benchmark_run_batch(
             "finished_at": None,
         }
     )
+    subj = principal_llm_rate_key(principal)
     results: list[dict[str, Any]] = []
     for q in questions:
         qid = str(q["id"])
         text = str(q["question"])
-        out = run_rag_test(
-            settings,
-            deps.get_chroma(),
-            db,
-            text,
-            scope,
-            prof,
-            debug=False,
-        )
+        try:
+            out = run_rag_test(
+                settings,
+                deps.get_chroma(),
+                db,
+                text,
+                scope,
+                prof,
+                debug=False,
+                llm_rate_subject=subj,
+            )
+        except LlmRateLimitExceeded as e:
+            ra = max(1, int(e.retry_after_sec) + 1)
+            db.update_benchmark_run(run_id, status="failed", summary_metrics_json=None, finished_at=utc_now_iso())
+            raise HTTPException(
+                status_code=429,
+                detail="LLM rate limit during benchmark batch.",
+                headers={"Retry-After": str(ra)},
+            ) from e
         tr_id = str(uuid4())
         db.insert_rag_test_run(
             {

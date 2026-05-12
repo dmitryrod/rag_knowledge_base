@@ -12,6 +12,7 @@ import httpx
 
 from app.config import Settings
 from app.llm_types import LlmCompletionResult
+from app.rate_limits import consume_llm_min_interval_or_raise
 
 _log = logging.getLogger(__name__)
 
@@ -84,10 +85,14 @@ def chat_completion_with_result(
     response_format: dict[str, Any] | None = None,
     provider: dict[str, Any] | None = None,
     timeout: float = 120.0,
+    llm_rate_subject: str | None = None,
 ) -> LlmCompletionResult:
     """POST /chat/completions; returns content + model/provider/usage for diagnostics."""
     if not settings.polza_api_key:
         raise RuntimeError("POLZA_API_KEY is not set")
+
+    if llm_rate_subject:
+        consume_llm_min_interval_or_raise(llm_rate_subject, settings.llm_min_interval_ms)
 
     url = settings.polza_base_url.rstrip("/") + "/chat/completions"
     payload = _build_chat_payload(
@@ -173,9 +178,11 @@ def chat_completion_with_result(
 def chat_completion(
     settings: Settings,
     messages: list[dict[str, str]],
+    *,
+    llm_rate_subject: str | None = None,
 ) -> str:
     """POST /chat/completions; returns assistant message content (legacy)."""
-    return chat_completion_with_result(settings, messages).content
+    return chat_completion_with_result(settings, messages, llm_rate_subject=llm_rate_subject).content
 
 
 def parse_json_response(raw: str) -> dict[str, Any]:

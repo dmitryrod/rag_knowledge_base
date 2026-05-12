@@ -13,13 +13,15 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.deps import init_stores
 from app.routers.api import public, router
 from app.routers.auth_api import router as auth_api_router
 from app.routers.rag_test import router as rag_test_router
 from app.routers.users_admin import router as users_admin_router
+from app.security_middleware import DocsBasicAuthMiddleware, V1PostRateLimitMiddleware
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -37,6 +39,14 @@ def _cors_allow_origins() -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
+def _trusted_proxy_hosts(settings: Settings) -> list[str] | str:
+    raw = (settings.trust_proxy_hosts or "").strip()
+    if not raw or raw == "*":
+        return "*"
+    parts = [x.strip() for x in raw.split(",") if x.strip()]
+    return parts if parts else "*"
+
+
 def _inject_index_html() -> str:
     """Подставляет window.__API_BASE__ для fetch() при APP_PUBLIC_BASE_URL."""
     path = _STATIC / "index.html"
@@ -49,7 +59,7 @@ def _inject_index_html() -> str:
     return raw.replace(marker, f"  <script>\n    {inject}", 1)
 
 
-def _print_open_urls() -> None:
+def _print_open_urls(settings: Settings) -> None:
     """Печать в терминал адресов для браузера (Docker: задай APP_EXPOSED_PORT = порт на хосте)."""
     internal = _listen_port()
     exposed = (os.environ.get("APP_EXPOSED_PORT") or "").strip()
@@ -64,11 +74,15 @@ def _print_open_urls() -> None:
         "",
         f"  Knowledge API{hint}",
         f"  -> Веб-админка: {base}/",
-        f"  -> Swagger: {base}/docs",
-        f"  -> ReDoc:   {base}/redoc",
-        f"  -> Health:  {base}/v1/health",
-        "",
     ]
+    if not settings.app_openapi_disabled:
+        lines.extend(
+            [
+                f"  -> Swagger: {base}/docs",
+                f"  -> ReDoc:   {base}/redoc",
+            ]
+        )
+    lines.extend([f"  -> Health:  {base}/v1/health", ""])
     try:
         print("\n".join(lines), flush=True)
     except UnicodeEncodeError:
@@ -88,17 +102,24 @@ async def lifespan(app: FastAPI):
     logging.getLogger("app").setLevel(logging.INFO)
     settings = get_settings()
     init_stores(settings)
-    _print_open_urls()
+    _print_open_urls(settings)
     yield
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
+    openapi_url = None if settings.app_openapi_disabled else "/openapi.json"
+    docs_url = None if settings.app_openapi_disabled else "/docs"
+    redoc_url = None if settings.app_openapi_disabled else "/redoc"
+
     app = FastAPI(
         title="Knowledge workspace",
         version="0.5.0",
         lifespan=lifespan,
+        openapi_url=openapi_url,
+        docs_url=docs_url,
+        redoc_url=redoc_url,
     )
-    settings = get_settings()
 
     sess = (settings.session_secret or "").strip()
     secret_key = sess if sess else "dev-insecure-session-change-in-production"
@@ -108,9 +129,26 @@ def create_app() -> FastAPI:
         secret_key=secret_key,
         session_cookie="knowledge_session",
         same_site="lax",
-        https_only=False,
+        https_only=bool(settings.session_cookie_https_only),
         max_age=1209600,
     )
+
+    ao = _cors_allow_origins()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ao,
+        allow_credentials=(ao != ["*"]),
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+    app.add_middleware(DocsBasicAuthMiddleware, settings=settings)
+    app.add_middleware(V1PostRateLimitMiddleware, settings=settings)
+    if settings.trust_proxy_headers:
+        app.add_middleware(
+            ProxyHeadersMiddleware,
+            trusted_hosts=_trusted_proxy_hosts(settings),
+        )
 
     @app.get("/", include_in_schema=False)
     def admin_index() -> HTMLResponse:
@@ -122,16 +160,6 @@ def create_app() -> FastAPI:
     app.include_router(users_admin_router, prefix="/v1", tags=["admin-users"])
     app.include_router(router, prefix="/v1", tags=["api"])
     app.include_router(rag_test_router, prefix="/v1", tags=["rag-test"])
-
-    ao = _cors_allow_origins()
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ao,
-        allow_credentials=(ao != ["*"]),
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
     return app
 
 

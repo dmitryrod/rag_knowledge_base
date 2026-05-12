@@ -10,15 +10,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _settings_env_files() -> tuple[str, ...]:
-    """По умолчанию загружаются `.env`, `app/.env`; в pytest задаётся KNOWLEDGE_TESTS_NO_DOTENV=1 без reload."""
+    """По умолчанию загружаются `app/.env`, затем `.env` (корень перекрывает шаблон)."""
     v = os.getenv("KNOWLEDGE_TESTS_NO_DOTENV", "").strip().lower()
     if v in ("1", "true", "yes", "on"):
         return ()
-    return (".env", "app/.env")
+    return ("app/.env", ".env")
 
 
 class Settings(BaseSettings):
-    """Application settings; loads from `.env` in cwd or `app/.env`."""
+    """Application settings; loads from `app/.env` and then root `.env`."""
 
     model_config = SettingsConfigDict(
         env_file=_settings_env_files(),
@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(validation_alias=AliasChoices("RETRIEVAL_TOP_K"))
     # Если false — даже при X-Debug: 1 в ответ не отдаётся traceback (только серверные логи)
     allow_client_debug: bool = Field(
-        default=True,
+        default=False,
         validation_alias=AliasChoices("APP_ALLOW_CLIENT_DEBUG", "APP_CLIENT_DEBUG"),
     )
     # Браузер: префикс для fetch() к API (когда UI открыт с другого origin/порта). Без слеша на конце.
@@ -100,6 +100,74 @@ class Settings(BaseSettings):
             "DEMO_WORKSPACE_SHARE_TOKEN",
             "APP_DEMO_WORKSPACE_SHARE_TOKEN",
         ),
+    )
+
+    # --- Reverse proxy (Traefik / nginx): клиентский IP и заголовки перехода ---
+    trust_proxy_headers: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("TRUST_PROXY_HEADERS", "APP_TRUST_PROXY_HEADERS"),
+    )
+    trust_proxy_hosts: str = Field(
+        default="*",
+        validation_alias=AliasChoices("TRUST_PROXY_HOSTS", "APP_TRUST_PROXY_HOSTS"),
+    )
+
+    # Cookie сессии: флаг Secure (только HTTPS). За TLS-терминатором задайте SESSION_COOKIE_HTTPS_ONLY=true.
+    session_cookie_https_only: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "SESSION_COOKIE_HTTPS_ONLY",
+            "SESSION_COOKIE_SECURE",
+        ),
+    )
+
+    # OpenAPI / Swagger / ReDoc. true — отключить все три (в проде часто выключают или закрывают Basic).
+    app_openapi_disabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("APP_OPENAPI_DISABLED", "APP_DOCS_DISABLED"),
+    )
+    app_docs_basic_auth_user: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APP_DOCS_BASIC_AUTH_USER", "DOCS_BASIC_AUTH_USER"),
+    )
+    app_docs_basic_auth_password: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APP_DOCS_BASIC_AUTH_PASSWORD", "DOCS_BASIC_AUTH_PASSWORD"),
+    )
+
+    # Лимиты (in-memory, один процесс). max=0 — выключено.
+    rate_limit_auth_login_max: int = Field(
+        default=0,
+        ge=0,
+        le=100_000,
+        validation_alias=AliasChoices("RATE_LIMIT_AUTH_LOGIN_MAX"),
+    )
+    rate_limit_auth_login_window_sec: int = Field(
+        default=900,
+        ge=5,
+        le=86_400,
+        validation_alias=AliasChoices("RATE_LIMIT_AUTH_LOGIN_WINDOW_SEC"),
+    )
+    rate_limit_v1_post_max: int = Field(
+        default=0,
+        ge=0,
+        le=1_000_000,
+        validation_alias=AliasChoices("RATE_LIMIT_V1_POST_MAX"),
+    )
+    rate_limit_v1_post_window_sec: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        validation_alias=AliasChoices("RATE_LIMIT_V1_POST_WINDOW_SEC"),
+    )
+
+    # Минимальный интервал между исходящими вызовами LLM (мс) для одного субъекта auth. 0 — без лимита.
+    # Пример: 1000 ≈ не чаще 1 раза/сек; 60000 ≈ раз в минуту.
+    llm_min_interval_ms: int = Field(
+        default=0,
+        ge=0,
+        le=3_600_000,
+        validation_alias=AliasChoices("LLM_MIN_INTERVAL_MS"),
     )
 
 
