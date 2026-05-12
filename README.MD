@@ -154,8 +154,7 @@ flowchart LR
 ## Структура репозитория
 
 ```text
-app/
-  docs/             # каноническая сопутствующая документация
+app/            # каноническая сопутствующая документация
   routers/          # API routers
   static/           # веб-админка
   tests/            # pytest
@@ -166,19 +165,3 @@ docker-compose.yml  # compose-запуск knowledge-api (сборка по ум
 docker-compose.wheels.yml  # override: сборка offline только из local-dist/wheels
 pyproject.toml      # зависимости, package metadata, entrypoint knowledge-api
 ```
-
-## Документация
-
-- [`app/docs/README.md`](app/docs/README.md) — подробный запуск и навигация по документации.
-- [`app/docs/ARCHITECTURE.md`](app/docs/ARCHITECTURE.md) — текущее устройство приложения и точки расширения.
-- [`app/docs/CHANGELOG.md`](app/docs/CHANGELOG.md) — изменения поведения, API и конфигурации.
-- [`app/docs/CONTRIBUTING.md`](app/docs/CONTRIBUTING.md) — правила правок и проверок.
-- [`app/docs/ROADMAP.md`](app/docs/ROADMAP.md) — V1/V2/Enterprise ориентиры.
-- [`app/docs/troubleshooting.md`](app/docs/troubleshooting.md) — проверенные сценарии диагностики.
-
-## Ограничения MVP
-
-- Это не multi-tenant SaaS и не готовая enterprise HA/DR-инсталляция.
-- SSO, расширенный SIEM-audit, видео/ASR, Marp-презентации и полноценные отчёты описаны как будущие направления, но не являются текущим runtime-функционалом.
-- Ответы должны опираться на найденные фрагменты. Если релевантного контекста нет, ожидаемый ответ — `НЕ НАЙДЕНО В БАЗЕ`.
-
