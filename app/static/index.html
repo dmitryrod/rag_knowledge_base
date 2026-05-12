@@ -1151,13 +1151,66 @@
     }
     .upload-status {
       display: inline-flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.45rem;
       font-size: 0.85rem;
       color: var(--on-surface-variant);
       min-height: 2rem;
+      flex: 1;
+      min-width: min(100%, 220px);
     }
-    .upload-status .spin { flex-shrink: 0; }
+    .upload-status .spin { flex-shrink: 0; margin-top: 0.15rem; }
+    .upload-status-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex: 1;
+      min-width: 0;
+    }
+    .upload-status-caption {
+      font-size: 0.8rem;
+      color: var(--on-surface-variant);
+      line-height: 1.25;
+    }
+    .upload-progress-host {
+      width: 100%;
+    }
+    .upload-progress-track {
+      position: relative;
+      height: 1.65rem;
+      border-radius: var(--radius-md);
+      background: var(--surface-container-highest);
+      border: 1px solid color-mix(in srgb, var(--outline-variant) 72%, transparent);
+      overflow: hidden;
+    }
+    .upload-progress-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0%;
+      background: color-mix(in srgb, var(--primary) 48%, var(--surface-container-highest));
+      border-radius: inherit;
+      transition: width 0.14s ease-out;
+      pointer-events: none;
+    }
+    .upload-progress-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 0.55rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--on-surface);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      z-index: 1;
+      pointer-events: none;
+      text-shadow: 0 0 4px var(--surface), 0 1px 2px var(--surface);
+    }
     button.btn {
       display: inline-flex;
       align-items: center;
@@ -1932,7 +1985,24 @@
                   <button type="button" class="btn" id="btnUpload">Загрузить</button>
                   <div id="uploadStatus" class="upload-status hidden" role="status" aria-live="polite" aria-busy="false">
                     <span class="spin" aria-hidden="true"></span>
-                    <span id="uploadStatusMsg">Загружаю файл...</span>
+                    <div class="upload-status-body">
+                      <div id="uploadStatusCaption" class="upload-status-caption"></div>
+                      <div
+                        id="uploadProgressHost"
+                        class="upload-progress-host"
+                        role="progressbar"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="0"
+                        aria-valuetext=""
+                      >
+                        <div class="upload-progress-track">
+                          <!-- Прогресс только по отправке тела на клиенте; индексация на сервере не отображается. -->
+                          <div id="uploadProgressFill" class="upload-progress-fill"></div>
+                          <span id="uploadProgressLabel" class="upload-progress-label" title=""></span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Документы в разделе</h3>
@@ -5697,16 +5767,77 @@
       } catch (e) { errBox($("docErr"), String(e)); }
     }
 
-    function setUploadLoading(on, msg) {
+    function resetUploadProgressUI() {
+      const cap = $("uploadStatusCaption");
+      if (cap) cap.textContent = "";
+      const fill = $("uploadProgressFill");
+      const lab = $("uploadProgressLabel");
+      const host = $("uploadProgressHost");
+      if (fill) fill.style.width = "0%";
+      if (lab) {
+        lab.textContent = "";
+        lab.title = "";
+      }
+      if (host) {
+        host.setAttribute("aria-valuenow", "0");
+        host.setAttribute("aria-valuetext", "");
+      }
+    }
+    /** Обновляет caption «файл i из n», подпись на баре и ширину заливки (0–100). idx1/nTotal optional — caption не трогаем. */
+    function updateUploadProgressBar(pct, fileLabel, idx1, nTotal) {
+      const cap = $("uploadStatusCaption");
+      if (cap && idx1 != null && nTotal != null) {
+        cap.textContent = "Загружаю файл " + idx1 + " из " + nTotal;
+      }
+      const p = Math.max(0, Math.min(100, pct));
+      const fill = $("uploadProgressFill");
+      const lab = $("uploadProgressLabel");
+      const host = $("uploadProgressHost");
+      if (fill) fill.style.width = p + "%";
+      const name = fileLabel != null ? String(fileLabel) : "";
+      if (lab) {
+        lab.textContent = name;
+        lab.title = name;
+      }
+      if (host) {
+        host.setAttribute("aria-valuenow", String(p));
+        host.setAttribute("aria-valuetext", name ? name + ", " + p + "%" : p + "%");
+      }
+    }
+    function setUploadLoading(on) {
       const st = $("uploadStatus");
       const btn = $("btnUpload");
-      const msgEl = $("uploadStatusMsg");
-      if (msgEl && msg != null) msgEl.textContent = msg;
       if (st) {
         st.classList.toggle("hidden", !on);
         st.setAttribute("aria-busy", on ? "true" : "false");
       }
       if (btn) btn.disabled = !!on;
+      if (!on) resetUploadProgressUI();
+    }
+    /** POST multipart с теми же заголовками что fetch + cookie; прогресс только по upload тела. Без Content-Type — задаёт браузер для boundary. */
+    function postDocumentMultipartXHR(url, formData, headerMap, onUploadProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", url);
+        xhr.withCredentials = true;
+        Object.keys(headerMap || {}).forEach((key) => {
+          xhr.setRequestHeader(key, headerMap[key]);
+        });
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable && ev.total > 0) {
+            onUploadProgress(Math.min(100, Math.round((100 * ev.loaded) / ev.total)));
+          }
+        };
+        xhr.onload = () => {
+          resolve({
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: xhr.status,
+            text: xhr.responseText || "",
+          });
+        };
+        xhr.onerror = () => reject(new Error("Сеть: запрос не выполнен"));
+        xhr.send(formData);
+      });
     }
     $("btnUpload").onclick = async () => {
       errBox($("docErr"), "");
@@ -5718,20 +5849,25 @@
       const url = apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents");
       const failures = [];
       let okCount = 0;
-      setUploadLoading(true, n === 1 ? "Загружаю файл…" : "Загружаю файл 1 из " + n + "…");
+      setUploadLoading(true);
+      resetUploadProgressUI();
       try {
         for (let i = 0; i < n; i++) {
           const f = list[i];
           const label = f.name || "(без имени)";
-          if (n > 1) setUploadLoading(true, "Загружаю файл " + (i + 1) + " из " + n + ": " + label);
+          const idx1 = i + 1;
+          updateUploadProgressBar(0, label, idx1, n);
           const fd = new FormData();
           fd.append("file", f);
           try {
-            const r = await fetchWithCred(url, { method: "POST", headers: { ...kh }, body: fd });
+            const r = await postDocumentMultipartXHR(url, fd, kh, (pct) => {
+              updateUploadProgressBar(pct, label, null, null);
+            });
             if (!r.ok) {
-              const t = await r.text();
-              failures.push({ name: label, err: t || r.status + " " + r.statusText });
+              failures.push({ name: label, err: r.text || r.status + "" });
             } else {
+              updateUploadProgressBar(100, label, idx1, n);
+              await new Promise((res) => setTimeout(res, 140));
               okCount++;
             }
           } catch (e) {
@@ -5756,7 +5892,7 @@
           errBox($("docErr"), summary);
         }
       } finally {
-        setUploadLoading(false, "Загружаю файл…");
+        setUploadLoading(false);
       }
     };
 
