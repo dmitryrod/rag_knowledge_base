@@ -26,10 +26,11 @@ services:
       APP_DATA_DIR: /data
       # Показывать в логе старта ссылку с портом хоста (http://127.0.0.1:…), а не внутри контейнера
       APP_EXPOSED_PORT: ${KNOWLEDGE_API_PORT:-8002}
+    # app/.env затем корневой .env — секреты в ./.env перекрывают шаблон в app/.env (пустые ключи не затирают корень).
     env_file:
-      - path: .env
-        required: false
       - path: app/.env
+        required: false
+      - path: .env
         required: false
     # Снижает Errno -3 (Temporary failure in name resolution) в Linux/Docker, если resolv хоста/ВПН отдаёт битый DNS.
     dns:

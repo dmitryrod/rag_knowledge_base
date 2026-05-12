@@ -18,12 +18,12 @@ services:
     container_name: rag_knowledge_base-knowledge-api
     environment:
       APP_DATA_DIR: /data
-    # Сначала корень репо (.env) — опционально; затем app/.env (канон из README).
-    # Иначе при секретах только в ./.env контейнер их не видит → auth_configured: false.
+    # Сначала app/.env (лимиты из примера), затем корневой .env — при дублях ключей побеждает ПОСЛЕДНИЙ файл.
+    # Если бы шёл обратный порядок, пустые SESSION_SECRET= в app/.env затирали бы секреты из ./.env → auth_configured: false.
     env_file:
-      - path: .env
-        required: false
       - path: app/.env
+        required: false
+      - path: .env
         required: false
     dns:
       - 8.8.8.8
