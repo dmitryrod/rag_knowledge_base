@@ -27,7 +27,10 @@ services:
       # Показывать в логе старта ссылку с портом хоста (http://127.0.0.1:…), а не внутри контейнера
       APP_EXPOSED_PORT: ${KNOWLEDGE_API_PORT:-8002}
     env_file:
-      - app/.env
+      - path: .env
+        required: false
+      - path: app/.env
+        required: false
     # Снижает Errno -3 (Temporary failure in name resolution) в Linux/Docker, если resolv хоста/ВПН отдаёт битый DNS.
     dns:
       - 8.8.8.8
