@@ -1,0 +1,45 @@
+# Production за Traefik: сеть apps_network, без публикации порта на хост (доступ только через HTTPS).
+# Локально / отладка: корневой docker-compose.yml (порт KNOWLEDGE_API_PORT → 8000).
+#
+# На сервере: из /opt/apps/knowledge
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+services:
+  knowledge-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        wheelhouse: ./local-dist/wheels
+      pull: false
+      args:
+        WHEEL_MODE: ${WHEEL_MODE:-online}
+    image: rag_knowledge_base-knowledge-api:local
+    container_name: rag_knowledge_base-knowledge-api
+    environment:
+      APP_DATA_DIR: /data
+    env_file:
+      - app/.env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    volumes:
+      - knowledge_data:/data
+    restart: unless-stopped
+    networks:
+      - apps_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=apps_network"
+      - "traefik.http.routers.rag-knowledge.rule=Host(`knowledge.dmitryrod.ru`)"
+      - "traefik.http.routers.rag-knowledge.entrypoints=websecure"
+      - "traefik.http.routers.rag-knowledge.tls=true"
+      - "traefik.http.routers.rag-knowledge.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rag-knowledge.loadbalancer.server.port=8000"
+
+volumes:
+  knowledge_data:
+
+networks:
+  apps_network:
+    external: true

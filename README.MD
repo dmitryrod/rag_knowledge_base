@@ -63,6 +63,8 @@ docker compose up --build
 
 Порт хоста по умолчанию — `8002`, внутри контейнера приложение слушает `8000`. Чтобы сменить порт, скопируй [`env.docker.example`](env.docker.example) в `.env` в корне репозитория и задай `KNOWLEDGE_API_PORT`.
 
+**Production (VPS + Traefik):** `docker-compose.prod.yml`, CD с ветки `deploy` — см. [`app/docs/publish_project_on_server.md`](app/docs/publish_project_on_server.md) (раздел knowledge.dmitryrod.ru).
+
 ## Локальный запуск без Docker
 
 Требования: Python `>=3.11`.

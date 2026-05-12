@@ -1,0 +1,46 @@
+# CD: push в ветку deploy → обновление /opt/apps/knowledge на VPS и проверка /v1/health.
+name: Deploy production
+
+on:
+  push:
+    branches: [deploy]
+
+concurrency:
+  group: deploy-knowledge-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add SSH host key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+
+      - name: Deploy on server
+        run: |
+          port="${DEPLOY_SSH_PORT:-22}"
+          ssh -p "$port" -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'bash -s' < scripts/deploy/remote-update.sh
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+
+      - name: Verify health
+        run: |
+          curl -fsS --retry 8 --retry-delay 6 --retry-all-errors \
+            "https://knowledge.dmitryrod.ru/v1/health"
