@@ -10,7 +10,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 from typing_extensions import Annotated
 
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, is_session_login_configured
 from app.config import is_auth_required as config_is_auth_required
 from app.passwords import verify_password
 from app.registry_db import RegistryDB
@@ -56,7 +56,9 @@ def principal_to_auth_context(p: Principal) -> AuthContext:
     return AuthContext(role="member")
 
 
-def _session_auth_blob(request: Request) -> dict | None:
+def _session_auth_blob(request: Request, settings: Settings) -> dict | None:
+    if not is_session_login_configured(settings):
+        return None
     sess = getattr(request, "session", None)
     if sess is None:
         return None
@@ -152,7 +154,7 @@ def resolve_principal(
         bearer = auth[7:].strip()
     token = x_api_key or bearer
 
-    blob = _session_auth_blob(request)
+    blob = _session_auth_blob(request, settings)
     if blob:
         try:
             tenant_id = str(blob["tenant_id"])

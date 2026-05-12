@@ -41,6 +41,74 @@ def test_health_session_login_configured(client_session: TestClient) -> None:
     assert j["auth_configured"] is True
 
 
+def test_auth_login_returns_503_without_session_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.delenv("APP_API_KEY", raising=False)
+    monkeypatch.delenv("APP_ADMIN_KEY", raising=False)
+    monkeypatch.delenv("APP_MEMBER_KEY", raising=False)
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.setenv("ADMIN_LOGIN", "admin")
+    monkeypatch.setenv("ADMIN_PASSWORD", "adminpass")
+    monkeypatch.setenv("DEMO_ENABLED", "true")
+    monkeypatch.setenv("DEMO_LOGIN", "demo")
+    monkeypatch.setenv("DEMO_PASSWORD", "demopass")
+    monkeypatch.setenv("ALLOW_LLM_EGRESS", "false")
+    monkeypatch.setenv("POLZA_API_KEY", "")
+    from importlib import reload
+
+    import app.config
+    import app.main
+
+    reload(app.config)
+    reload(app.main)
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        health = client.get("/v1/health")
+        assert health.status_code == 200
+        assert health.json()["auth_configured"] is True
+        assert health.json()["session_login_configured"] is False
+
+        login = client.post("/v1/auth/login", json={"username": "demo", "password": "demopass"})
+        assert login.status_code == 503
+        assert login.json()["detail"] == "Session login is not configured"
+
+
+def test_protected_routes_do_not_fall_back_to_dev_mode_without_session_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.delenv("APP_API_KEY", raising=False)
+    monkeypatch.delenv("APP_ADMIN_KEY", raising=False)
+    monkeypatch.delenv("APP_MEMBER_KEY", raising=False)
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.setenv("ADMIN_LOGIN", "admin")
+    monkeypatch.setenv("ADMIN_PASSWORD", "adminpass")
+    monkeypatch.setenv("DEMO_ENABLED", "true")
+    monkeypatch.setenv("DEMO_LOGIN", "demo")
+    monkeypatch.setenv("DEMO_PASSWORD", "demopass")
+    monkeypatch.setenv("ALLOW_LLM_EGRESS", "false")
+    monkeypatch.setenv("POLZA_API_KEY", "")
+    from importlib import reload
+
+    import app.config
+    import app.main
+
+    reload(app.config)
+    reload(app.main)
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        me = client.get("/v1/auth/me")
+        assert me.status_code == 401
+        create = client.post("/v1/collections", json={"name": "must-not-work-anon"})
+        assert create.status_code == 401
+
+
 def test_auth_login_me_flow(client_session: TestClient) -> None:
     r = client_session.post("/v1/auth/login", json={"username": "admin", "password": "adminpass"})
     assert r.status_code == 200, r.text

@@ -64,10 +64,11 @@ class Settings(BaseSettings):
     # По умолчанию внешние вызовы LLM выключены; для Polza задайте true.
     allow_llm_egress: bool = Field(default=False, validation_alias=AliasChoices("ALLOW_LLM_EGRESS"))
 
-    chunk_size: int = 800
-    chunk_overlap: int = 120
-    max_upload_mb: int = 10
-    retrieval_top_k: int = 8
+    # Ingest/RAG лимиты — только из окружения (см. `app/.env`); в тестах — setdefault в `app/tests/conftest.py`.
+    chunk_size: int = Field(validation_alias=AliasChoices("CHUNK_SIZE"))
+    chunk_overlap: int = Field(validation_alias=AliasChoices("CHUNK_OVERLAP"))
+    max_upload_mb: int = Field(validation_alias=AliasChoices("MAX_UPLOAD_MB"))
+    retrieval_top_k: int = Field(validation_alias=AliasChoices("RETRIEVAL_TOP_K"))
     # Если false — даже при X-Debug: 1 в ответ не отдаётся traceback (только серверные логи)
     allow_client_debug: bool = Field(
         default=True,
@@ -87,6 +88,19 @@ class Settings(BaseSettings):
     demo_enabled: bool = Field(default=False, validation_alias=AliasChoices("DEMO_ENABLED", "APP_DEMO_ENABLED"))
     demo_login: str | None = Field(default=None, validation_alias=AliasChoices("DEMO_LOGIN", "APP_DEMO_LOGIN"))
     demo_password: str | None = Field(default=None, validation_alias=AliasChoices("DEMO_PASSWORD", "APP_DEMO_PASSWORD"))
+    # DEMO читает чужой каталог tenants/<id>/ (разделы/документы остаются read-only из-за site_role=demo).
+    # Приоритет: tenant_id ниже, затем share-токен из registry; иначе пустой env_demo.
+    demo_workspace_tenant_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("DEMO_WORKSPACE_TENANT_ID", "APP_DEMO_WORKSPACE_TENANT_ID"),
+    )
+    demo_workspace_share_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "DEMO_WORKSPACE_SHARE_TOKEN",
+            "APP_DEMO_WORKSPACE_SHARE_TOKEN",
+        ),
+    )
 
 
 def get_settings() -> Settings:
@@ -102,19 +116,33 @@ def polza_allowlist_ids(settings: Settings) -> set[str]:
 
 
 def is_session_login_configured(settings: Settings) -> bool:
-    """True, если заданы секрет сессии и пара admin login/password для POST /v1/auth/login."""
+    """True, если browser session login реально включён: есть SESSION_SECRET и env-учётка для входа."""
     sec = (settings.session_secret or "").strip()
+    return bool(sec and has_session_credentials(settings))
+
+
+def has_session_credentials(settings: Settings) -> bool:
+    """True, если заданы env-учётки, которые делают auth обязательной даже без SESSION_SECRET."""
     al = (settings.admin_login or "").strip()
     ap = settings.admin_password
-    return bool(sec and al and ap is not None and str(ap) != "")
+    demo_login = (settings.demo_login or "").strip()
+    demo_password = settings.demo_password
+    has_admin = bool(al and ap is not None and str(ap) != "")
+    has_demo = bool(
+        settings.demo_enabled
+        and demo_login
+        and demo_password is not None
+        and str(demo_password) != ""
+    )
+    return bool(has_admin or has_demo)
 
 
 def is_auth_required(settings: Settings) -> bool:
-    """Ключи API и/или сессионный вход — иначе dev-режим без проверки."""
+    """Требовать auth, если заданы API-ключи или env-учётки для session login."""
     keys = bool(
         settings.app_api_key or settings.app_admin_key or settings.app_member_key
     )
-    return keys or is_session_login_configured(settings)
+    return keys or has_session_credentials(settings)
 
 
 def is_polza_model_allowlisted(settings: Settings) -> bool:

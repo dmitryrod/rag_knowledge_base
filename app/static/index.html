@@ -2418,7 +2418,7 @@
     function formatBytes(n) {
       if (n == null || !Number.isFinite(Number(n))) return "—";
       let x = Number(n);
-      const u = ["B", "KB", "MB", "GB", "TB"];
+      const u = ["b", "Kb", "Mb", "Gb", "Tb"];
       let i = 0;
       while (x >= 1024 && i < u.length - 1) { x /= 1024; i += 1; }
       return (i === 0 ? String(Math.round(x)) : (x < 10 ? x.toFixed(1) : String(Math.round(x)))) + " " + u[i];
@@ -5658,7 +5658,7 @@
           const tr = document.createElement("tr");
           const did = d.id;
           const t0 = document.createElement("td"); t0.textContent = d.filename || did;
-          const sz = d.size_bytes != null ? String(d.size_bytes) : "—";
+          const sz = d.size_bytes != null ? formatBytes(d.size_bytes) : "—";
           const tSize = document.createElement("td"); tSize.textContent = sz;
           const t1 = document.createElement("td");
           const openB = document.createElement("button");

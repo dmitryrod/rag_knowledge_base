@@ -12,7 +12,8 @@ from app.auth_dep import (
     is_user_panel_admin,
     try_login_with_password,
 )
-from app.config import get_settings
+from app.config import Settings, get_settings, is_session_login_configured
+from app.demo_workspace import resolve_demo_storage_tenant_id
 from app.deps import get_registry
 from app.registry_db import RegistryDB
 from app.router_tenant_bind import bind_tenant_context
@@ -28,6 +29,8 @@ class LoginBody(BaseModel):
 @router.post("/auth/login")
 def auth_login(request: Request, body: LoginBody) -> dict[str, bool | str]:
     settings = get_settings()
+    if not is_session_login_configured(settings):
+        raise HTTPException(status_code=503, detail="Session login is not configured")
     registry = get_registry()
     p = try_login_with_password(body.username, body.password, settings, registry)
     if p is None:
@@ -44,6 +47,8 @@ def auth_login(request: Request, body: LoginBody) -> dict[str, bool | str]:
 
 @router.post("/auth/logout")
 def auth_logout(request: Request) -> dict[str, bool]:
+    if not is_session_login_configured(get_settings()):
+        raise HTTPException(status_code=503, detail="Session login is not configured")
     request.session.clear()
     return {"ok": True}
 
@@ -52,8 +57,9 @@ def auth_logout(request: Request) -> dict[str, bool]:
 def auth_me(
     principal: Principal = Depends(get_principal),
     registry: RegistryDB = Depends(get_registry),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
-    return {
+    out: dict[str, bool | str | None] = {
         "tenant_id": principal.tenant_id,
         "site_role": principal.site_role,
         "subject": principal.subject,
@@ -61,3 +67,8 @@ def auth_me(
         "is_demo": principal.site_role == "demo",
         "can_manage_users": is_user_panel_admin(principal),
     }
+    if principal.site_role == "demo" and principal.subject == "env_demo":
+        shadow = resolve_demo_storage_tenant_id(settings, registry)
+        if shadow != principal.tenant_id:
+            out["demo_workspace_storage_tenant_id"] = shadow
+    return out

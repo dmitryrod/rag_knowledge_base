@@ -7,6 +7,7 @@ from pathlib import Path
 from app.chroma_store import ChromaStore
 from app.config import Settings, get_settings
 from app.db_sqlite import MetadataDB
+from app.demo_workspace import resolve_demo_storage_tenant_id
 from app.registry_db import RegistryDB
 from app.request_tenant import current_tenant_id
 from app.tenancy import TENANT_ENV_ADMIN, TENANT_ENV_DEMO, migrate_legacy_layout, tenant_dir
@@ -30,7 +31,16 @@ def init_stores(settings: Settings) -> None:
         and settings.demo_password is not None
         and str(settings.demo_password) != ""
     ):
-        _ensure_tenant_store(settings, TENANT_ENV_DEMO)
+        demo_storage = resolve_demo_storage_tenant_id(settings, _registry_db)
+        meta = tenant_dir(data, demo_storage) / "metadata.db"
+        if demo_storage != TENANT_ENV_DEMO and not meta.is_file():
+            msg = (
+                f"DEMO указывает на tenant {demo_storage!r}, но нет файла metadata.db "
+                f"(проверьте DEMO_WORKSPACE_TENANT_ID / DEMO_WORKSPACE_SHARE_TOKEN и каталог данных)."
+            )
+            raise RuntimeError(msg)
+        _ensure_tenant_store(settings, demo_storage)
+        # Пустой каталог env_demo не нужен, если читаем чужой workspace.
 
 
 def _ensure_tenant_store(settings: Settings, tenant_id: str) -> tuple[MetadataDB, ChromaStore]:

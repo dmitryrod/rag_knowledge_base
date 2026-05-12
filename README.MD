@@ -28,7 +28,7 @@
 New-Item -ItemType Directory -Force -Path local-dist\wheels | Out-Null
 ```
 
-В **`.dockerignore`** для `local-dist/wheels` исключены только тяжёлые артефакты (`*.whl`, архивы), а не сам каталог — иначе BuildKit не находит путь для `RUN --mount=type=bind,source=local-dist/wheels,...`.
+В **`.dockerignore`** для `local-dist/wheels` исключены только тяжёлые артефакты (`*.whl`, архивы), чтобы не раздувать tarball контекста; каталог на диске должен существовать и быть заполнен для offline. Wheelhouse в сборке подключается как именованный контекст Compose **`additional_contexts.wheelhouse`** → `RUN --mount=from=wheelhouse` в `Dockerfile` (не через bind пути к tarball — на Docker Desktop для Windows bind к `local-dist/wheels` внутри `docker build` часто оказывался пустым).
 
 Дальше варианты:
 
@@ -91,7 +91,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `APP_API_KEY`, `APP_ADMIN_KEY`, `APP_MEMBER_KEY` — опциональная аутентификация и роли.
 - `POLZA_API_KEY`, `POLZA_BASE_URL`, `POLZA_CHAT_MODEL`, `POLZA_TEMPERATURE` — настройки LLM-провайдера.
 - `ALLOW_LLM_EGRESS`, `POLZA_CHAT_MODEL_ALLOWLIST` — контроль внешних вызовов и разрешённых моделей.
-- `CHUNK_SIZE`, `CHUNK_OVERLAP`, `MAX_UPLOAD_MB`, `RETRIEVAL_TOP_K` — ingest/RAG лимиты.
+- `CHUNK_SIZE`, `CHUNK_OVERLAP`, `MAX_UPLOAD_MB`, `RETRIEVAL_TOP_K` — ingest/RAG лимиты (только env, см. `app/.env` / `app/.env.example`).
 - `APP_CORS_ORIGINS`, `APP_PUBLIC_BASE_URL`, `APP_ALLOW_CLIENT_DEBUG` — браузерный UI, CORS и debug.
 
 Не коммить реальные `.env`, ключи и локальные данные. `app/.env`, корневой `.env`, `app/data/` в git не кладём; содержимое `local-dist/` (колёса, tar) тоже нет, но сам каталог `local-dist/wheels/` в дереве есть за счёт `.gitkeep`.
