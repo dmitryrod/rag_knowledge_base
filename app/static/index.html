@@ -1926,13 +1926,13 @@
                 <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:1rem 0 0.4rem 0">Подразделы</h3>
                 <ul id="sectionChildrenList" class="kb-inline-list" style="list-style:none; padding:0; margin:0 0 0.75rem 0; min-height:0"></ul>
                 <h3 id="colPanelUploadH3" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Загрузка</h3>
-                <div class="drop-zone" id="dropZone">Перетащите файл сюда или выберите ниже</div>
+                <div class="drop-zone" id="dropZone">Перетащите файлы сюда или выберите ниже</div>
                 <div class="row" id="colPanelUploadRow" style="margin:0.5rem 0">
-                  <input type="file" id="fileIn" />
+                  <input type="file" id="fileIn" multiple />
                   <button type="button" class="btn" id="btnUpload">Загрузить</button>
                   <div id="uploadStatus" class="upload-status hidden" role="status" aria-live="polite" aria-busy="false">
                     <span class="spin" aria-hidden="true"></span>
-                    <span>Загружаю файл...</span>
+                    <span id="uploadStatusMsg">Загружаю файл...</span>
                   </div>
                 </div>
                 <h3 style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--on-surface-variant); margin:0.75rem 0 0.4rem 0">Документы в разделе</h3>
@@ -5697,9 +5697,11 @@
       } catch (e) { errBox($("docErr"), String(e)); }
     }
 
-    function setUploadLoading(on) {
+    function setUploadLoading(on, msg) {
       const st = $("uploadStatus");
       const btn = $("btnUpload");
+      const msgEl = $("uploadStatusMsg");
+      if (msgEl && msg != null) msgEl.textContent = msg;
       if (st) {
         st.classList.toggle("hidden", !on);
         st.setAttribute("aria-busy", on ? "true" : "false");
@@ -5709,23 +5711,52 @@
     $("btnUpload").onclick = async () => {
       errBox($("docErr"), "");
       const fin = $("fileIn");
-      const f = fin && fin.files[0];
-      if (!f || !selectedCid || selectedCid === UI_KB_ROOT_ID) return;
-      setUploadLoading(true);
-      const fd = new FormData();
-      fd.append("file", f);
+      const list = fin && fin.files ? Array.from(fin.files) : [];
+      if (!list.length || !selectedCid || selectedCid === UI_KB_ROOT_ID) return;
+      const n = list.length;
       const kh = headers(false);
+      const url = apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents");
+      const failures = [];
+      let okCount = 0;
+      setUploadLoading(true, n === 1 ? "Загружаю файл…" : "Загружаю файл 1 из " + n + "…");
       try {
-        const r = await fetchWithCred(apiPath("/v1/collections/" + encodeURIComponent(selectedCid) + "/documents"), { method: "POST", headers: { ...kh }, body: fd });
-        if (!r.ok) throw new Error(await r.text());
-        if (fin) fin.value = "";
-        await loadDocs();
-        await loadKnowledgeTree();
-        await loadKnowledgeStats();
-      } catch (e) {
-        errBox($("docErr"), String(e));
+        for (let i = 0; i < n; i++) {
+          const f = list[i];
+          const label = f.name || "(без имени)";
+          if (n > 1) setUploadLoading(true, "Загружаю файл " + (i + 1) + " из " + n + ": " + label);
+          const fd = new FormData();
+          fd.append("file", f);
+          try {
+            const r = await fetchWithCred(url, { method: "POST", headers: { ...kh }, body: fd });
+            if (!r.ok) {
+              const t = await r.text();
+              failures.push({ name: label, err: t || r.status + " " + r.statusText });
+            } else {
+              okCount++;
+            }
+          } catch (e) {
+            failures.push({ name: label, err: String(e) });
+          }
+        }
+        if (okCount > 0) {
+          await loadDocs();
+          await loadKnowledgeTree();
+          await loadKnowledgeStats();
+        }
+        if (failures.length === 0) {
+          if (fin) fin.value = "";
+        } else {
+          const lines = failures.map((x) => x.name + ": " + x.err);
+          let summary = "";
+          if (okCount > 0 && failures.length > 0) {
+            summary = "Загружено файлов: " + okCount + " из " + n + ". Ошибки:\n" + lines.join("\n");
+          } else {
+            summary = lines.join("\n");
+          }
+          errBox($("docErr"), summary);
+        }
       } finally {
-        setUploadLoading(false);
+        setUploadLoading(false, "Загружаю файл…");
       }
     };
 
@@ -5737,8 +5768,11 @@
       dz.addEventListener(ev, (e) => { e.preventDefault(); dz.style.borderColor = ""; });
     });
     dz.addEventListener("drop", (e) => {
-      const f = e.dataTransfer.files[0];
-      if (f) { $("fileIn").files = e.dataTransfer.files; $("btnUpload").click(); }
+      const dt = e.dataTransfer && e.dataTransfer.files;
+      if (dt && dt.length) {
+        $("fileIn").files = dt;
+        $("btnUpload").click();
+      }
     });
 
     $("btnDelCol").onclick = async () => {
