@@ -1997,7 +1997,7 @@
                         aria-valuetext=""
                       >
                         <div class="upload-progress-track">
-                          <!-- Прогресс только по отправке тела на клиенте; индексация на сервере не отображается. -->
+                          <!-- Визуально: байты тела → часть бара; до ответа сервера ползунок подходит к ~92%, 100% только после успешного ответа. -->
                           <div id="uploadProgressFill" class="upload-progress-fill"></div>
                           <span id="uploadProgressLabel" class="upload-progress-label" title=""></span>
                         </div>
@@ -5814,9 +5814,40 @@
       if (btn) btn.disabled = !!on;
       if (!on) resetUploadProgressUI();
     }
-    /** POST multipart с теми же заголовками что fetch + cookie; прогресс только по upload тела. Без Content-Type — задаёт браузер для boundary. */
-    function postDocumentMultipartXHR(url, formData, headerMap, onUploadProgress) {
+    /** POST multipart: визуальный прогресс совмещает отправку тела (0…UPLOAD_BAR_CAP %) и ожидание ответа (ползёт до CREEP_TARGET %), 100 % выставляет вызывающий код после успеха. */
+    function postDocumentMultipartXHR(url, formData, headerMap, onVisualProgress) {
+      const UPLOAD_BAR_CAP = 46;
+      const CREEP_TARGET = 92;
       return new Promise((resolve, reject) => {
+        let creepRaf = null;
+        let lastDisplayed = 0;
+        let uploadEndedAt = 0;
+        let creepAbort = false;
+        function pushVisual(pct) {
+          lastDisplayed = Math.max(0, Math.min(100, pct));
+          onVisualProgress(lastDisplayed);
+        }
+        function stopCreep() {
+          creepAbort = true;
+          if (creepRaf != null) {
+            cancelAnimationFrame(creepRaf);
+            creepRaf = null;
+          }
+        }
+        /** После отправки тела сервер долго индексирует — бар асимптотически тянется по времени ожидания (без SSE это приближение). */
+        function loopCreep() {
+          creepAbort = false;
+          function tick() {
+            if (creepAbort) return;
+            const elapsed = performance.now() - uploadEndedAt;
+            const span = CREEP_TARGET - UPLOAD_BAR_CAP;
+            const tau = 120000;
+            const frac = 1 - Math.exp(-elapsed / tau);
+            pushVisual(Math.round(UPLOAD_BAR_CAP + span * Math.min(0.997, frac)));
+            creepRaf = requestAnimationFrame(tick);
+          }
+          creepRaf = requestAnimationFrame(tick);
+        }
         const xhr = new XMLHttpRequest();
         xhr.open("POST", url);
         xhr.withCredentials = true;
@@ -5825,17 +5856,28 @@
         });
         xhr.upload.onprogress = (ev) => {
           if (ev.lengthComputable && ev.total > 0) {
-            onUploadProgress(Math.min(100, Math.round((100 * ev.loaded) / ev.total)));
+            const u = Math.min(1, ev.loaded / ev.total);
+            pushVisual(Math.round(u * UPLOAD_BAR_CAP));
           }
         };
+        xhr.upload.addEventListener("loadend", () => {
+          uploadEndedAt = performance.now();
+          if (lastDisplayed < UPLOAD_BAR_CAP) pushVisual(UPLOAD_BAR_CAP);
+          stopCreep();
+          loopCreep();
+        });
         xhr.onload = () => {
+          stopCreep();
           resolve({
             ok: xhr.status >= 200 && xhr.status < 300,
             status: xhr.status,
             text: xhr.responseText || "",
           });
         };
-        xhr.onerror = () => reject(new Error("Сеть: запрос не выполнен"));
+        xhr.onerror = () => {
+          stopCreep();
+          reject(new Error("Сеть: запрос не выполнен"));
+        };
         xhr.send(formData);
       });
     }
